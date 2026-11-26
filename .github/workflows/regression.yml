@@ -14,3 +14,5 @@ jobs:
         run: sh tests/test-config.sh
       - name: Mocked reconciliation
         run: python3 tests/test-reconcile.py
+      - name: Mocked DNAT destination validation
+        run: sh -n router/dnat-validate.sh && python3 tests/test-dnat-validate.py
