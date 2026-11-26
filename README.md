@@ -11,6 +11,7 @@ The AI board periodically invokes a restricted SSH command over its internal man
 - [Installation and safety](docs/installation.md)
 - [Acceptance tests and limitations](docs/acceptance-tests.md)
 - [Changelog](CHANGELOG.md)
+- [Project roadmap](ROADMAP.md)
 
 The published baseline replaces private test addresses with documentation addresses and parameterises the SSH username. The v0.3.0 router engine was downloaded from its pinned public commit and tested with local configuration; the public scheduler username adaptation has not been separately retested. Do not deploy unchanged or enable enforcement until local settings are reviewed.
 
