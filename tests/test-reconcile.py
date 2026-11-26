@@ -27,7 +27,14 @@ with tempfile.TemporaryDirectory() as td:
         source = source.replace(old, new, 1)
     engine = root / "engine.sh"
     engine.write_text(source)
-    shutil.copy(repo / "router/nat-config.awk", root)
+    for name in ("nat-config.awk", "dnat-conflicts.awk"):
+        shutil.copy(repo / "router" / name, root)
+    # Real destination validator is covered separately; inject its failure here.
+    validator = root / "dnat-validate.sh"
+    validator.write_text('#!/bin/sh\ncat >/dev/null\n[ ! -f "$MOCK_ROOT/fail-destination" ]\n')
+    validator.chmod(0o700)
+    dnat = root / "dnat-rules.conf"
+    dnat.write_text("# empty\n")
     wan = root / "wan-check.sh"
     wan.write_text("#!/bin/sh\nexit 0\n")
     wan.chmod(0o700)
@@ -37,7 +44,7 @@ with tempfile.TemporaryDirectory() as td:
     commits = root / "commits"
     env = dict(os.environ, MOCK_ROOT=str(root))
     def mode(value, ip="203.0.113.10"):
-        config.write_text(f"MODE={value}\nEXPECTED_WAN_IP={ip}\n")
+        config.write_text(f"MODE={value}\nEXPECTED_WAN_IP={ip}\nDNAT_ALLOWED_INTERFACES=br0\n")
     def get():
         return json.loads(state.read_text())
     def put(data):
@@ -117,6 +124,90 @@ with tempfile.TemporaryDirectory() as td:
     # Unexpected references are refused, not removed.
     put({"POSTROUTING": [native], "AI_NAT_SNAT": [],
          "OTHER": [jump]})
+    before = get()
+    run("Unexpected references", False)
+    assert get() == before and count() == n
+    # Combined v0.4.0 cases.
+    dj = "-j AI_NAT_DNAT"
+    native_pre = "-d 203.0.113.10/32 -j VSERVER"
+    native_dnat = "-p tcp -m tcp --dport 443 -j DNAT --to-destination 192.168.1.101"
+    base = {"POSTROUTING": [native], "PREROUTING": [native_pre],
+            "VSERVER": [native_dnat]}
+    put(base)
+    rules.write_text(valid)
+    good = "1|WAN_IP|any|tcp|8443|192.168.1.100|443|0\n"
+    dnat.write_text(good)
+    mode("AUDIT")
+    n = count()
+    run("DRIFT_DETECTED")
+    assert get() == base and count() == n
+    mode("ENFORCE")
+    run("RECONCILED")
+    assert count() == n+1
+    assert get()["POSTROUTING"] == [jump, native]
+    assert get()["PREROUTING"] == [native_pre, dj]
+    assert get()["VSERVER"] == [native_dnat]
+    assert len(get()["AI_NAT_DNAT"]) == 1
+    tx = (root / "last-transaction").read_text()
+    assert "-N AI_NAT_SNAT" in tx and "-N AI_NAT_DNAT" in tx
+    run("IN_SYNC")
+    assert count() == n+1
+    before = get()
+    # Invalid DNAT blocks even pending SNAT changes.
+    rules.write_text("# empty\n")
+    dnat.write_text(good + "bad\n")
+    run("Invalid DNAT configuration", False)
+    assert get() == before and count() == n+1
+    dnat.write_text(good)
+    rules.write_text(valid)
+    for marker, message in (("fail-destination", "DNAT destination validation failed"),
+                            ("no-filter", "Required native DNAT forwarding rule unavailable")):
+        (root / marker).touch()
+        run(message, False)
+        assert get() == before and count() == n+1
+        (root / marker).unlink()
+    dnat.write_text(good.replace("8443", "443"))
+    run("Native DNAT conflict validation failed", False)
+    assert get() == before and count() == n+1
+    dnat.write_text(good.replace("8443", "443").replace("|0\n", "|1\n"))
+    result = run("RECONCILED")
+    assert "native conflict overridden" in result.stderr
+    tx = (root / "last-transaction").read_text()
+    assert "AI_NAT_SNAT" not in tx
+    result = run("IN_SYNC")
+    assert "Force enabled" in result.stderr
+    # SNAT-only drift must leave DNAT unchanged.
+    rules.write_text("# empty\n")
+    run("RECONCILED")
+    assert "AI_NAT_DNAT" not in (root / "last-transaction").read_text()
+    # Duplicate/misordered DNAT jump recovery.
+    data = get()
+    data["PREROUTING"] = [dj, native_pre, dj]
+    put(data)
+    run("RECONCILED")
+    assert get()["PREROUTING"] == [native_pre, dj]
+    # Empty DNAT removes owned chain, not native rules.
+    dnat.write_text("# empty\n")
+    run("RECONCILED")
+    assert "AI_NAT_DNAT" not in get() and get()["PREROUTING"] == [native_pre]
+    # Missing DNAT file fails rather than silently removing mappings.
+    dnat.unlink()
+    before = get()
+    n = count()
+    run("Invalid DNAT configuration", False)
+    assert get() == before and count() == n
+    dnat.write_text(good)
+    run("RECONCILED")
+    mode("DISABLED")
+    dnat.unlink()
+    rules.unlink()
+    run("Status: DISABLED")
+    assert get() == base
+    n = count()
+    run("already clean")
+    assert count() == n
+    # Foreign DNAT reference blocks cleanup even when config is absent.
+    put(dict(base, AI_NAT_DNAT=[], OTHER=[dj]))
     before = get()
     run("Unexpected references", False)
     assert get() == before and count() == n

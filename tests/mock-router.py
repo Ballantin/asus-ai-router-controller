@@ -12,15 +12,22 @@ args = sys.argv[1:]
 if cmd == "logger":
     sys.exit(0)
 if cmd == "nvram":
-    values = {"wan0_gw_ifname": "ppp0", "wan0_ipaddr": "203.0.113.10"}
+    values = {"wan0_gw_ifname": "ppp0", "wan0_ipaddr": "203.0.113.10", "wan0_ifname": "eth0"}
     print(values[args[1]])
     sys.exit(0)
 data = json.loads(state.read_text())
 if cmd == "iptables":
+    if args == ["-t", "filter", "-S", "FORWARD"]:
+        print("-P FORWARD ACCEPT")
+        if not (root / "no-filter").exists():
+            print("-A FORWARD -m conntrack --ctstate DNAT -j ACCEPT")
+        print("-A FORWARD -j DROP")
+        sys.exit(0)
     assert args == ["-t", "nat", "-S"], args
     print("-P POSTROUTING ACCEPT")
+    print("-P PREROUTING ACCEPT")
     for chain in data:
-        if chain != "POSTROUTING":
+        if chain not in ("POSTROUTING", "PREROUTING"):
             print("-N " + chain)
     for chain, rules in data.items():
         for rule in rules:
@@ -42,7 +49,7 @@ for line in lines[1:-1]:
         assert not data[chain]
         del data[chain]
     elif op == "-A":
-        data[chain].append(rule)
+        data.setdefault(chain, []).append(rule)
     elif op == "-D":
         data[chain].remove(rule)
     elif op == "-I":
@@ -59,3 +66,4 @@ if (root / "fail-commit").exists():
 state.write_text(json.dumps(data))
 with (root / "commits").open("a") as log:
     log.write("commit\n")
+(root / "last-transaction").write_text("\n".join(lines))

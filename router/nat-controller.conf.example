@@ -4,8 +4,8 @@
 # EXPECTED_WAN_IP: primary WAN IPv4 address, not an additional IP.
 # A mismatch blocks audit/enforcement; DISABLED cleanup bypasses WAN checks.
 # MODE and EXPECTED_WAN_IP mandatory; case-sensitive KEY=VALUE, no spaces.
-# DNAT_ALLOWED_INTERFACES: optional during parser development; required for
-# enabled DNAT in the future engine. Comma-separated interface names, no
+# DNAT_ALLOWED_INTERFACES: optional with no enabled DNAT; required for
+# enabled DNAT. Comma-separated interface names, no
 # duplicates, maximum 32. Only explicitly authorised LAN/VLAN interfaces.
 # Route and local-address validation must also pass; never list WAN or
 # management interfaces. Omission grants no DNAT destination permissions.
