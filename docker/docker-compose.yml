@@ -1,0 +1,51 @@
+services:
+  router-controller:
+    image: router-controller:0.1.0
+    container_name: router-controller
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    volumes:
+      - router-controller-ssh:/root/.ssh:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - RECONCILE_INTERVAL=30
+      - TZ=UTC
+      - ROUTER_USER=${ROUTER_USER:?Set ROUTER_USER to the router SSH username}
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Router Controller v0.1.0 starting"
+        echo "Reconciliation interval: $${RECONCILE_INTERVAL}s"
+        while true; do
+          echo "--- Reconciliation started: $$(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
+          timeout -s TERM -k 5 15 ssh -T \
+            -i /root/.ssh/router_controller \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=5 \
+            -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=2 \
+            "$${ROUTER_USER}@169.254.0.1"
+          RC=$$?
+          if [ "$$RC" -eq 0 ]; then
+            echo "Controller execution successful"
+          else
+            echo "ERROR: Controller execution failed (exit=$$RC)"
+          fi
+          sleep "$${RECONCILE_INTERVAL}"
+        done
+volumes:
+  router-controller-ssh:
+    external: true

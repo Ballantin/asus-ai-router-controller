@@ -1,0 +1,12 @@
+/router/nat-controller.conf
+/router/snat-rules.conf
+/router/dnat-rules.conf
+/docker/.env
+**/.ssh/
+**/router_controller
+**/router_controller.pub
+**/known_hosts*
+*.pem
+*.key
+*.log
+*.local
