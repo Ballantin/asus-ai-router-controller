@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 — in development
+- External general and ordered SNAT configuration with documented templates and strict AWK validation.
+- Parser and mocked transaction regression tests; CI workflow.
+- No Docker scheduler changes; hardware validation pending.
+
 ## 0.2.0 — 2026-11-26 (experimental baseline)
 - Router-side WAN validation, exclusive controller lock, audit/enforce/disabled modes.
 - Dedicated SNAT chain, transactional changes, drift detection and post-commit verification.
@@ -8,5 +13,3 @@
 - Public snapshot sanitises local test addresses and SSH username.
 - No iptables comment matches: dry-run passed but kernel commit failed on tested firmware.
 
-## Planned 0.3.0
-- External SNAT rules and general configuration, multiple ordered rules and comprehensive in-file syntax documentation.

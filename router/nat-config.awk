@@ -10,7 +10,7 @@ function uint(s,max) {
     return s ~ /^(0|[1-9][0-9]*)$/ && length(s)<=5 && s+0<=max
 }
 function ipv4(s, a,n,i) {
-    n=split(s,a,".")
+    n=split(s,a,"[.]")
     if(n!=4) return 0
     for(i=1;i<=4;i++) if(!uint(a[i],255)) return 0
     return 1
@@ -24,7 +24,7 @@ function cidr(s, a,b,n,p,i,block) {
         p=a[2]+0
     }
     # Require network-aligned CIDRs; avoid silent normalisation.
-    split(a[1],b,".")
+    split(a[1],b,"[.]")
     for(i=1;i<=4;i++) {
         block=2^(8-(p>=8?8:p))
         if((b[i]+0)%block!=0) reject("CIDR has host bits set")

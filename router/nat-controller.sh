@@ -66,7 +66,7 @@ echo "Chain exists: $CHAIN_EXISTS"
 echo "Jump count: $JUMP_COUNT"
 
 if [ "$MODE" = "DISABLED" ]; then
-    if [ "$CHAIN_EXISTS" = "0" ]; then
+    if [ "$CHAIN_EXISTS" = "0" ] && [ "$JUMP_COUNT" = "0" ]; then
         echo "Status: DISABLED (already clean)"
         exit 0
     fi

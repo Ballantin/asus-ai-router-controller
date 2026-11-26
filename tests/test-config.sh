@@ -34,6 +34,18 @@ bad '1|192.168.1.100|any|tcp|443|$(id)'
 [ "$(awk -v kind=general -f "$P" router/nat-controller.conf.example)" = 'AUDIT
 203.0.113.10' ]
 if printf 'MODE=AUDIT\nMODE=ENFORCE\nEXPECTED_WAN_IP=203.0.113.10\n' | awk -v kind=general -f "$P" >/dev/null 2>&1; then exit 1; fi
+check '1|192.168.1.100|any|tcp|443:443|WAN_IP' '-A AI_NAT_SNAT -s 192.168.1.100/32 -o ppp0 -p tcp -m tcp --dport 443 -j SNAT --to-source 203.0.113.10'
+check '# comment
+
+0|192.168.1.100|any|udp|53|WAN_IP' ''
+bad '1|192.168.01.100|any|tcp|443|WAN_IP'
+bad '1|192.168.1.100|any|tcp|0|WAN_IP'
+bad '1|192.168.1.100|any|tcp|443|WAN_IP|extra'
+bad '1|192.168.1.100|any|tcp|443|WAN_IP # comment'
+bad '1|192.168.1.100|any|any|443|WAN_IP'
+# No output from a partially valid file.
+out="$(printf '%s\n' '1|192.168.1.100|any|tcp|443|WAN_IP' 'invalid' | parse 2>/dev/null)" && exit 1
+[ -z "$out" ]
 sh -n router/nat-controller.sh
 sh -n router/wan-check.sh
 echo 'Parser regression tests passed'

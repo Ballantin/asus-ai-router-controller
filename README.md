@@ -4,7 +4,7 @@ Autonomous router configuration management using the ASUS AI board and native ha
 
 ## Status: experimental proof of concept
 
-Router engine v0.2.0 and AI board Docker scheduler v0.1.0. Tested on a GT-BE19000AI with stock Asuswrt, BusyBox 1.24.1 and iptables 1.4.12.2. No custom firmware required. This is not a production-ready multi-IP NAT release.
+Development branch: router engine v0.3.0 (not hardware-validated); AI board Docker scheduler v0.1.0. The v0.2.0 baseline was tested. Tested on a GT-BE19000AI with stock Asuswrt, BusyBox 1.24.1 and iptables 1.4.12.2. No custom firmware required. This is not a production-ready multi-IP NAT release.
 
 The AI board periodically invokes a restricted SSH command over its internal management link. The main router validates WAN state, compares desired and actual NAT rules, and applies changes to a dedicated chain only when necessary. Traffic forwarding remains on the main router.
 
@@ -14,6 +14,6 @@ The AI board periodically invokes a restricted SSH command over its internal man
 
 The published baseline replaces private test addresses with documentation addresses and parameterises the SSH username. These public adaptations have not been retested on hardware. Do not deploy unchanged or enable enforcement until local settings are reviewed.
 
-Next milestone: v0.3.0, externalised, self-documenting SNAT configuration. DNAT and additional public IPs remain unvalidated.
+This branch adds externalised, self-documenting SNAT configuration. See [development acceptance](docs/v0.3.0-testing.md). DNAT and additional public IPs remain unvalidated.
 
 Independent community project; not affiliated with ASUS. See LICENSE.
