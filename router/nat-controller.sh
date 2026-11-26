@@ -1,7 +1,7 @@
 #!/bin/sh
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-VERSION="0.2.0"
+VERSION="0.3.0"
 BASE="/jffs/custom"
 RUNTIME="/tmp/nat-controller"
 CHAIN="AI_NAT_SNAT"
@@ -18,8 +18,10 @@ if ! flock -n 9; then
     echo "SKIP: Controller already running"
     exit 0
 fi
-MODE="$(cat "$BASE/nat-controller.conf")" ||
-    fail "Cannot read configuration"
+GENERAL="$(awk -v kind=general -f "$BASE/nat-config.awk" "$BASE/nat-controller.conf")" ||
+    fail "Invalid general configuration"
+MODE="$(printf '%s\n' "$GENERAL" | sed -n '1p')"
+EXPECTED_WAN_IP="$(printf '%s\n' "$GENERAL" | sed -n '2p')"
 case "$MODE" in
     DISABLED|AUDIT|ENFORCE) ;;
     *) fail "Invalid operating mode: $MODE" ;;
@@ -29,18 +31,14 @@ echo "Version: $VERSION"
 echo "Mode: $MODE"
 echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-# Sanitised example values; replace locally before testing.
-SRC="192.168.1.100"
-DST="198.51.100.20"
-PORT="443"
-EXPECTED_WAN_IP="203.0.113.10"
-
 if [ "$MODE" != "DISABLED" ]; then
     "$BASE/wan-check.sh" || fail "WAN validation failed"
     WAN_IF="$(nvram get wan0_gw_ifname)"
     WAN_IP="$(nvram get wan0_ipaddr)"
     [ "$WAN_IP" = "$EXPECTED_WAN_IP" ] ||
-        fail "Test configuration does not match WAN IP"
+        fail "Configured primary WAN IP mismatch"
+    DESIRED_RULES="$(awk -v kind=snat -v wan_if="$WAN_IF" -v wan_ip="$WAN_IP" -f "$BASE/nat-config.awk" "$BASE/snat-rules.conf")" ||
+        fail "Invalid SNAT configuration"
 fi
 SNAPSHOT="$(iptables -t nat -S)" ||
     fail "Cannot inspect NAT table"
@@ -68,23 +66,23 @@ echo "Chain exists: $CHAIN_EXISTS"
 echo "Jump count: $JUMP_COUNT"
 
 if [ "$MODE" = "DISABLED" ]; then
-    if [ "$CHAIN_EXISTS" = "0" ]; then
+    if [ "$CHAIN_EXISTS" = "0" ] && [ "$JUMP_COUNT" = "0" ]; then
         echo "Status: DISABLED (already clean)"
         exit 0
     fi
 else
-    DESIRED_RULE="-A $CHAIN -s $SRC/32 -d $DST/32 -o $WAN_IF -p tcp -m tcp --dport $PORT -j SNAT --to-source $WAN_IP"
     if [ "$CHAIN_EXISTS" = "1" ] &&
        [ "$JUMP_COUNT" = "1" ] &&
        [ "$FIRST_RULE" = "$JUMP" ] &&
-       [ "$ACTUAL_RULES" = "$DESIRED_RULE" ]; then
+       [ "$ACTUAL_RULES" = "$DESIRED_RULES" ]; then
         echo "Status: IN_SYNC"
         exit 0
     fi
     echo "Status: DRIFT_DETECTED"
     if [ "$MODE" = "AUDIT" ]; then
         echo "Action: None (audit mode)"
-        echo "Desired rule: $DESIRED_RULE"
+        echo "Desired rules:"
+        printf '%s\n' "$DESIRED_RULES"
         exit 0
     fi
 fi
@@ -104,7 +102,9 @@ TRANSACTION="$(
         else
             echo "-N $CHAIN"
         fi
-        echo "$DESIRED_RULE"
+        if [ -n "$DESIRED_RULES" ]; then
+            printf '%s\n' "$DESIRED_RULES"
+        fi
         echo "-I POSTROUTING 1 -j $CHAIN"
     fi
     echo 'COMMIT'
@@ -137,6 +137,9 @@ if [ "$MODE" = "DISABLED" ]; then
     if printf '%s\n' "$AFTER" | grep -q "^[-]N $CHAIN\$"; then
         fail "Chain removal verification failed"
     fi
+    if printf '%s\n' "$AFTER" | grep -Fxq -- "$JUMP"; then
+        fail "Jump removal verification failed"
+    fi
     echo "Status: DISABLED"
     logger -t ai-nat-controller "Managed chain removed"
 else
@@ -146,7 +149,7 @@ else
         awk -v j="$JUMP" '$0==j {n++} END {print n+0}')"
     VERIFIED_FIRST="$(printf '%s\n' "$AFTER" |
         awk '$1=="-A" && $2=="POSTROUTING" {print; exit}')"
-    [ "$VERIFIED_RULES" = "$DESIRED_RULE" ] &&
+    [ "$VERIFIED_RULES" = "$DESIRED_RULES" ] &&
     [ "$VERIFIED_JUMPS" = "1" ] &&
     [ "$VERIFIED_FIRST" = "$JUMP" ] ||
         fail "Post-commit verification failed"

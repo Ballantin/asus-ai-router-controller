@@ -1,1 +1,12 @@
-AUDIT
+# AI Board NAT Controller — general configuration v0.3.0
+# MODE: DISABLED removes managed rules; AUDIT reports drift without
+# changing existing rules; ENFORCE installs and repairs desired rules.
+# EXPECTED_WAN_IP: primary WAN IPv4 address, not an additional IP.
+# A mismatch blocks audit/enforcement; DISABLED cleanup bypasses WAN checks.
+# Both keys mandatory, exactly once; case-sensitive KEY=VALUE, no spaces.
+# Blank lines and full-line # comments accepted; no inline comments.
+# Invalid configuration leaves existing rules in place.
+# Replace atomically using a sibling .new file and mv.
+# Documentation address below MUST be replaced locally.
+MODE=AUDIT
+EXPECTED_WAN_IP=203.0.113.10

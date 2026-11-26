@@ -1,0 +1,16 @@
+name: Regression tests
+on:
+  push:
+    branches: [main, 'develop/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parser and shell syntax
+        run: sh tests/test-config.sh
+      - name: Mocked reconciliation
+        run: python3 tests/test-reconcile.py
