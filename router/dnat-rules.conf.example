@@ -1,29 +1,23 @@
 # AI Board NAT Controller — DNAT configuration v0.4.0 (development)
-# Enabled|PublicIP|Protocol|ExternalPort|InternalIP|InternalPort
-#
-# Enabled: 1 (enabled), 0 (disabled; still syntax-checked).
-# PublicIP: WAN_IP (validated primary WAN address) or explicit IPv4
-#           routed/assigned by your ISP. Ownership is not verified.
-# Protocol: tcp or udp only (lowercase).
-# ExternalPort: single decimal port, 1–65535.
-# InternalIP: single IPv4 address of the intended internal host.
-# InternalPort: single decimal port, 1–65535; may differ from external port.
-# No CIDRs, wildcards, port ranges, or leading zeroes in numeric fields.
-# All six fields mandatory; no whitespace or inline comments.
-# Blank lines and full-line # comments ignored.
-# Enabled rules retain file order. Duplicate enabled external IP/protocol/
-# port combinations are rejected after resolving WAN_IP.
-# Disabled entries are not installed and do not reserve a tuple.
-# Invalid input rejects the entire file; no partial rule output.
-# Rules are scoped to the validated incoming WAN interface.
-# No hairpin NAT, IPv6, router-local forwarding or automatic filter changes.
-# DNAT can expose internal services to the Internet; verify firewall policy,
-# service authentication, intended LAN destination and ISP routing first.
-# Replace atomically via a sibling .new file and mv.
-#
-# Development stage: parser only. Existing v0.3.0 engine ignores this file.
-# Do not manually install generated rules on a live router.
-#
-# Inactive examples using documentation addresses:
-0|WAN_IP|tcp|8443|192.168.1.100|443
-0|203.0.113.11|udp|51820|192.168.1.101|51820
+# Enabled|PublicIP|SourceIP|Protocol|ExternalPort|InternalIP|InternalPort
+# Enabled: 1 enabled, 0 disabled (still syntax-checked).
+# PublicIP: WAN_IP or explicit IPv4; ISP routing/ownership not verified.
+# SourceIP: any, IPv4 or network-aligned IPv4 CIDR.
+# Protocol: tcp, udp, both (expands TCP then UDP for each port entry).
+# ExternalPort: 1–65535, inclusive colon range, or comma-separated list
+# of ports/ranges (maximum 256 entries per line).
+# InternalIP: single IPv4 host; must pass destination route validation.
+# InternalPort: same (preserve port) or one numeric port for a single
+# external port only. No port translation of lists or ranges.
+# All fields mandatory, no whitespace, no inline comments or leading
+# zeroes in numeric fields. Blank lines and full-line comments allowed.
+# Enabled rules retain file order; overlapping public IP/protocol/port/
+# source networks are rejected. Disjoint source networks may coexist.
+# Maximum 4096 expanded enabled rules; invalid file emits no rules.
+# Disabled rules do not reserve endpoints. Replace atomically with mv.
+# Native forwarding takes precedence; no filter modifications planned.
+# No hairpin or IPv6 support. All examples disabled. Parser only: do not
+# deploy generated rules manually. Live engine still v0.3.0.
+0|WAN_IP|any|tcp|8443|192.168.1.100|443
+0|203.0.113.11|any|both|2456:2458|192.168.1.101|same
+0|203.0.113.11|198.51.100.0/24|udp|4950,4955|192.168.1.102|same

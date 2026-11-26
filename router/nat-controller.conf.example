@@ -1,12 +1,19 @@
-# AI Board NAT Controller — general configuration v0.3.0
+# AI Board NAT Controller — general configuration v0.4.0 (development)
 # MODE: DISABLED removes managed rules; AUDIT reports drift without
 # changing existing rules; ENFORCE installs and repairs desired rules.
 # EXPECTED_WAN_IP: primary WAN IPv4 address, not an additional IP.
 # A mismatch blocks audit/enforcement; DISABLED cleanup bypasses WAN checks.
-# Both keys mandatory, exactly once; case-sensitive KEY=VALUE, no spaces.
+# MODE and EXPECTED_WAN_IP mandatory; case-sensitive KEY=VALUE, no spaces.
+# DNAT_ALLOWED_INTERFACES: optional during parser development; required for
+# enabled DNAT in the future engine. Comma-separated interface names, no
+# duplicates, maximum 32. Only explicitly authorised LAN/VLAN interfaces.
+# Route and local-address validation must also pass; never list WAN or
+# management interfaces. Omission grants no DNAT destination permissions.
 # Blank lines and full-line # comments accepted; no inline comments.
 # Invalid configuration leaves existing rules in place.
 # Replace atomically using a sibling .new file and mv.
 # Documentation address below MUST be replaced locally.
 MODE=AUDIT
 EXPECTED_WAN_IP=203.0.113.10
+
+DNAT_ALLOWED_INTERFACES=br0

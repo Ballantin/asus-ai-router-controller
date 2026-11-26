@@ -32,7 +32,8 @@ bad '1|192.168.1.100|any|tcp|443'
 bad '0|invalid|any|tcp|443|WAN_IP'
 bad '1|192.168.1.100|any|tcp|443|$(id)'
 [ "$(awk -v kind=general -f "$P" router/nat-controller.conf.example)" = 'AUDIT
-203.0.113.10' ]
+203.0.113.10
+br0' ]
 if printf 'MODE=AUDIT\nMODE=ENFORCE\nEXPECTED_WAN_IP=203.0.113.10\n' | awk -v kind=general -f "$P" >/dev/null 2>&1; then exit 1; fi
 check '1|192.168.1.100|any|tcp|443:443|WAN_IP' '-A AI_NAT_SNAT -s 192.168.1.100/32 -o ppp0 -p tcp -m tcp --dport 443 -j SNAT --to-source 203.0.113.10'
 check '# comment
@@ -58,21 +59,32 @@ dnat_bad() {
         printf 'Accepted invalid DNAT input: %s\n' "$1"; exit 1
     fi
 }
-dnat_check '1|WAN_IP|tcp|8443|192.168.1.100|443
-1|203.0.113.11|udp|51820|192.168.1.101|51820' '-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 8443 -j DNAT --to-destination 192.168.1.100:443
--A AI_NAT_DNAT -d 203.0.113.11/32 -i ppp0 -p udp -m udp --dport 51820 -j DNAT --to-destination 192.168.1.101:51820'
-dnat_check '0|WAN_IP|tcp|8443|192.168.1.100|443' ''
-dnat_bad '1|WAN_IP|any|8443|192.168.1.100|443'
-dnat_bad '1|WAN_IP|tcp|0|192.168.1.100|443'
-dnat_bad '1|WAN_IP|tcp|8443|192.168.1.100|65536'
-dnat_bad '1|WAN_IP|tcp|8000:9000|192.168.1.100|443'
-dnat_bad '1|WAN_IP|tcp|8443|192.168.1.0/24|443'
-dnat_bad '1|any|tcp|8443|192.168.1.100|443'
-dnat_bad '1|WAN_IP|tcp|8443|192.168.1.999|443'
-dnat_bad '0|WAN_IP|tcp|8443|192.168.1.100|$(id)'
-dnat_bad '1|WAN_IP|tcp|8443|192.168.1.100|443
-1|203.0.113.10|tcp|8443|192.168.1.101|443'
-out="$(printf '%s\n' '1|WAN_IP|tcp|8443|192.168.1.100|443' 'invalid' | parse_dnat 2>/dev/null)" && exit 1
+dnat_check '1|WAN_IP|any|tcp|8443|192.168.1.100|443
+1|203.0.113.11|198.51.100.0/24|udp|51820|192.168.1.101|same' '-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 8443 -j DNAT --to-destination 192.168.1.100:443
+-A AI_NAT_DNAT -s 198.51.100.0/24 -d 203.0.113.11/32 -i ppp0 -p udp -m udp --dport 51820 -j DNAT --to-destination 192.168.1.101'
+dnat_check '1|WAN_IP|any|both|80,100:102|192.168.1.100|same' '-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 192.168.1.100
+-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p udp -m udp --dport 80 -j DNAT --to-destination 192.168.1.100
+-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 100:102 -j DNAT --to-destination 192.168.1.100
+-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p udp -m udp --dport 100:102 -j DNAT --to-destination 192.168.1.100'
+dnat_check '0|WAN_IP|any|tcp|8443|192.168.1.100|443' ''
+printf '%s\n' '1|WAN_IP|198.51.100.0/25|tcp|443|192.168.1.100|same' '1|WAN_IP|198.51.100.128/25|tcp|443|192.168.1.101|same' | parse_dnat >/dev/null
+dnat_bad '1|WAN_IP|any|any|8443|192.168.1.100|443'
+dnat_bad '1|WAN_IP|any|tcp|0|192.168.1.100|443'
+dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.100|65536'
+dnat_bad '1|WAN_IP|any|tcp|8000:9000|192.168.1.100|443'
+dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.0/24|443'
+dnat_bad '1|any|any|tcp|8443|192.168.1.100|443'
+dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.999|443'
+dnat_bad '0|WAN_IP|any|tcp|8443|192.168.1.100|$(id)'
+dnat_bad '1|WAN_IP|any|tcp|8443|127.0.0.1|443'
+dnat_bad '1|WAN_IP|any|tcp|8443|169.254.0.2|443'
+dnat_bad '1|WAN_IP|any|tcp|80,|192.168.1.100|same'
+dnat_bad '1|WAN_IP|any|both|80,79:81|192.168.1.100|same'
+dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.100|443
+1|203.0.113.10|198.51.100.0/24|tcp|8443|192.168.1.101|443'
+dnat_bad '1|WAN_IP|198.51.100.0/24|both|8000:9000|192.168.1.100|same
+1|WAN_IP|198.51.100.128/25|udp|8500|192.168.1.101|same'
+out="$(printf '%s\n' '1|WAN_IP|any|tcp|8443|192.168.1.100|443' 'invalid' | parse_dnat 2>/dev/null)" && exit 1
 [ -z "$out" ]
 [ -z "$(parse_dnat < router/dnat-rules.conf.example)" ]
 sh -n router/nat-controller.sh
