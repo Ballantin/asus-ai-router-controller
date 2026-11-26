@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — in development
+- Add standalone DNAT parser mode, documented disabled-by-default template and parser tests.
+- Document forwarding-policy discovery and reconciliation design. No live DNAT enforcement yet.
+
 ## 0.3.0 — 2026-11-26 (experimental, hardware acceptance completed)
 - External general and ordered SNAT configuration with documented templates and strict AWK validation.
 - Parser and mocked transaction regression tests; CI workflow.
