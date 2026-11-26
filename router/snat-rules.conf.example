@@ -1,0 +1,31 @@
+# AI Board NAT Controller — SNAT configuration v0.3.0
+# Enabled|Source|Destination|Protocol|DestinationPort|TranslateTo
+#
+# Enabled: 1 (enabled), 0 (disabled; still syntax-checked).
+# Source: IPv4 or CIDR (192.168.1.100, 192.168.1.0/24,
+#         0.0.0.0/0 for all sources). Network-aligned CIDRs required.
+# Destination: any, IPv4, or network-aligned CIDR.
+# Protocol: any, tcp, udp, icmp (case-sensitive).
+# DestinationPort: any, 443, or inclusive range 8000:9000.
+#                  TCP/UDP only; use any for other protocols.
+#                  Valid numbers 1–65535; no leading zeroes.
+# TranslateTo: WAN_IP (validated primary address) or explicit IPv4
+#              assigned/routed by your ISP; ownership not validated.
+# IPv4 octets and prefixes must be decimal without leading zeroes.
+# Rules evaluated in file order; first matching SNAT wins.
+# Unmatched traffic falls through to ASUS rules. WAN interface automatic.
+# Empty ruleset installs an empty managed chain in ENFORCE.
+# All six fields mandatory, no spaces or inline comments.
+# Blank lines and full-line # comments ignored.
+# Invalid input blocks entire update; existing NAT stays in place.
+# Existing connections may retain previous mappings.
+# Replace atomically using sibling .new file and mv.
+#
+# Examples (inactive; replace documentation addresses locally):
+# 1|192.168.1.100|198.51.100.20|tcp|443|WAN_IP
+# 1|192.168.1.0/24|any|tcp|8000:9000|WAN_IP
+# 1|192.168.1.100/32|any|any|any|203.0.113.11
+# 0|192.168.1.100|any|udp|53|WAN_IP
+#
+# Active configuration — intentionally disabled example:
+0|192.168.1.100|198.51.100.20|tcp|443|WAN_IP
