@@ -1,11 +1,16 @@
 # POSIX awk: conservative overlap analysis of a native NAT snapshot.
-# Input: canonical desired DNAT file, then iptables -t nat -S snapshot.
+# Input: metadata-mode desired DNAT file, then iptables -t nat -S snapshot.
+# Each desired record: Force|configuration line|canonical rule.
 # Invoke with -v desired_file=PATH and both filenames (including empty files).
 # No shell execution or firewall changes.
 function fail(msg) {
     print "DNAT conflict check: " msg > "/dev/stderr"
     bad=1
     exit 1
+}
+function finding(msg) {
+    if(!forced) fail(msg)
+    print "WARNING: DNAT configuration line " config_line ": native conflict overridden: " msg > "/dev/stderr"
 }
 function number(s,max) {
     return s ~ /^(0|[1-9][0-9]*)$/ && length(s)<=10 && s+0<=max
@@ -119,17 +124,17 @@ function walk(chain,depth, i,line,os,oh,od,odh,op,oph,t,g,u,e) {
         parse(line)
         t=jump; g=goto_flag; u=unknown; e=excluded
         if(!e) {
-            if(u || g) fail("unsupported overlapping native rule in " chain ": " line)
-            if(t=="AI_NAT_DNAT") {
+            if(u || g) finding("unsupported overlapping native rule in " chain ": " line)
+            else if(t=="AI_NAT_DNAT") {
                 if(chain!="PREROUTING" || line!="-A PREROUTING -j AI_NAT_DNAT")
                     fail("unexpected managed chain reference in " chain)
                 # Own jump is reconciled separately, never analyse its rules.
             } else if(t=="DNAT" || t=="REDIRECT" || t=="NETMAP")
-                fail("overlapping native translation in " chain ": " line)
+                finding("overlapping native translation in " chain ": " line)
             else if(t=="RETURN") {
                 # Safe over-approximation: continue scanning possible paths.
             } else if(t in declared) walk(t,depth+1)
-            else fail("unsupported overlapping native target in " chain ": " line)
+            else finding("unsupported overlapping native target in " chain ": " line)
         }
         sl=os; sh=oh; dl=od; dh=odh; pl=op; ph=oph
     }
@@ -172,7 +177,12 @@ BEGIN {
 FILENAME==desired_file {
     if($0!="") {
         if(++nd>4096) fail("desired rule limit exceeded")
-        wanted[nd]=$0
+        if(split($0,record,"[|]")!=3 || record[1] !~ /^(0|1)$/ ||
+           !number(record[2],2147483647) || record[2]+0<1 || record[3]=="")
+            fail("invalid desired metadata")
+        flags[nd]=record[1]+0
+        source_lines[nd]=record[2]
+        wanted[nd]=record[3]
     }
     next
 }
@@ -190,8 +200,20 @@ END {
     if(bad) exit 1
     if(!nd) exit 0
     if(!declared["PREROUTING"]) fail("missing PREROUTING")
+    # Ownership is a global invariant, regardless of candidate overlap
+    # or Force. Inspect every chain, including unreachable ones.
+    for(chain in declared)
+        for(j=1;j<=nr[chain];j++) {
+            raw=rules[chain,j]
+            if(raw ~ /(^|[[:space:]])(-j|-g|--jump|--goto)[[:space:]]+AI_NAT_DNAT([[:space:]]|$)/ &&
+               raw!="-A PREROUTING -j AI_NAT_DNAT")
+                fail("unexpected managed chain reference in " chain)
+        }
     for(k=1;k<=nd;k++) {
+        forced=flags[k]
+        config_line=source_lines[k]
         desired(wanted[k])
+        if(forced) print "WARNING: DNAT configuration line " config_line ": Force enabled" > "/dev/stderr"
         walk("PREROUTING",1)
     }
     print "DNAT native conflict check passed"

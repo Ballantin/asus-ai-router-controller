@@ -67,6 +67,8 @@ function dnat_rule(proto, p, lo, hi, net, bits, low, high, i, r, a) {
     r=r " -d " public_ip "/32 -i " wan_if " -p " proto " -m " proto " --dport " p " -j DNAT --to-destination " target
     if(f[7]!="same") r=r ":" f[7]
     rules[++count]=r
+    forces[count]=f[8]
+    lines[count]=FNR
     dip[count]=public_ip
     dproto[count]=proto
     dlo[count]=lo
@@ -101,9 +103,10 @@ BEGIN {
         } else reject("unknown configuration key")
         next
     }
-    if($0 ~ /[ \t\r]/ || split($0,f,"[|]")!=(kind=="dnat"?7:6)) reject("incorrect number of pipe-delimited fields")
+    if($0 ~ /[ \t\r]/ || split($0,f,"[|]")!=(kind=="dnat"?8:6)) reject("incorrect number of pipe-delimited fields")
     if(f[1] !~ /^(0|1)$/) reject("invalid enabled flag")
     if(kind=="dnat") {
+        if(f[8] !~ /^(0|1)$/) reject("invalid Force flag")
         public_ip=(f[2]=="WAN_IP"?wan_ip:f[2])
         if(!hostaddr(public_ip)) reject("invalid external IPv4 address")
         src=(f[3]=="any"?"0.0.0.0/0":cidr(f[3]))
@@ -151,5 +154,8 @@ END {
         print mode
         print expected
         if(seenallow) print allowlist
-    } else for(i=1;i<=count;i++) print rules[i]
+    } else for(i=1;i<=count;i++) {
+        if(kind=="dnat" && metadata==1) print forces[i] "|" lines[i] "|" rules[i]
+        else print rules[i]
+    }
 }

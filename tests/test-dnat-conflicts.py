@@ -17,21 +17,23 @@ BASE = """-P PREROUTING ACCEPT
 -A VSERVER -p tcp -m tcp --dport 443 -j DNAT --to-destination 192.168.1.100:1443
 -A VSERVER -p udp -m udp --dport 8000:9000 -j DNAT --to-destination 192.168.1.100
 """
-def rule(ip="203.0.113.10", proto="tcp", port="443", src=""):
-    return ("-A AI_NAT_DNAT " + ("-s " + src + " " if src else "") +
+def rule(ip="203.0.113.10", proto="tcp", port="443", src="", force=0, line=1):
+    return (f"{force}|{line}|-A AI_NAT_DNAT " + ("-s " + src + " " if src else "") +
             f"-d {ip}/32 -i ppp0 -p {proto} -m {proto} --dport {port}"
             " -j DNAT --to-destination 192.168.1.101\n")
 
 with tempfile.TemporaryDirectory() as tmp:
     d = pathlib.Path(tmp) / "desired"
     n = pathlib.Path(tmp) / "native"
-    def check(wanted, ok, extra="", base=BASE):
+    def check(wanted, ok, extra="", base=BASE, warning=None):
         d.write_text(wanted)
         n.write_text(base + extra)
         r = subprocess.run(["awk", "-v", "desired_file=" + str(d), "-f",
                             str(ROOT / "router/dnat-conflicts.awk"), str(d), str(n)],
                            text=True, capture_output=True)
         assert (r.returncode == 0) == ok, (wanted, extra, r.stdout, r.stderr)
+        if warning is not None:
+            assert (warning in r.stderr), r.stderr
     check("", True)
     check(rule(), False)
     check(rule(ip="203.0.113.11"), True)
@@ -69,4 +71,17 @@ with tempfile.TemporaryDirectory() as tmp:
     check(rule(ip="203.0.113.11"), True,
           "-A VUPNP -d 192.0.2.1/32 -m comment --comment \"opaque\" -j CHILD\n" + child)
     check(rule(ip="203.0.113.11"), False, base="-P POSTROUTING ACCEPT\n")
+    check(rule(force=1, line=12), True, warning="line 12: native conflict overridden")
+    check(rule(ip="203.0.113.11", force=1), True,
+          "-A VUPNP -m multiport --dports 443,444 -j DNAT --to-destination 192.168.1.100\n",
+          warning="native conflict overridden")
+    check(rule(force=1) + rule(proto="udp", port="8500", line=2), False)
+    check(rule(force=1) + rule(ip="203.0.113.11", line=2), True)
+    check(rule(force=1), False, "-A VUPNP -j AI_NAT_DNAT\n")
+    check(rule(force=1), False, "-A POSTROUTING -j AI_NAT_DNAT\n")
+    check(rule(force=1), False, base="-P POSTROUTING ACCEPT\n")
+    check(rule(force=1, ip="203.0.113.11"), False, "-A VUPNP -j VUPNP\n")
+    check(rule(force=2), False)
+    check(rule(force=1).replace("-p tcp", "-p invalid"), False)
+    check(rule(force=1, ip="203.0.113.11"), True, warning="Force enabled")
 print("Native DNAT conflict tests passed")

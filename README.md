@@ -4,7 +4,7 @@ Autonomous router configuration management using the ASUS AI board and native ha
 
 ## Status: experimental proof of concept
 
-Development branch v0.4.0: DNAT parser and template under development; live engine remains v0.3.0. See [DNAT design](docs/v0.4.0-design.md).
+Development branch v0.4.0: DNAT parser and template under development; live engine remains v0.3.0. The DNAT template defaults to strict native conflict checks; an explicit per-rule Force override is available for experienced administrators, without bypassing destination safety or changing native precedence. See [DNAT design](docs/v0.4.0-design.md).
 
 Router engine v0.3.0 and AI board Docker scheduler v0.1.0. Primary-address SNAT and autonomous recovery hardware-validated on a GT-BE19000AI with stock Asuswrt, BusyBox 1.24.1 and iptables 1.4.12.2. No custom firmware required. This is not a production-ready multi-IP NAT release.
 
