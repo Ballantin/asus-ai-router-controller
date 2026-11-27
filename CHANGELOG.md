@@ -1,9 +1,10 @@
 # Changelog
 
-## 0.4.0 — in development
+## 0.4.0 — 2026-11-27 (experimental, PPPoE hardware acceptance)
 - Add standalone DNAT parser mode, documented disabled-by-default template and parser tests.
 - Add destination safety, native conflict analysis and per-rule Force override.
-- Integrate both managed chains into a single drift-based NAT transaction. Hardware acceptance pending.
+- Integrate both managed chains into a single drift-based NAT transaction and selectively withdraw unsafe DNAT mappings.
+- Verified TCP and UDP forwarding, native precedence, restart recovery, TCP DNAT hardware offload and rollback on stock Asuswrt with PPPoE. DHCP and additional routed IPv4 validation are planned for v0.4.5.
 
 ## 0.3.0 — 2026-11-26 (experimental, hardware acceptance completed)
 - External general and ordered SNAT configuration with documented templates and strict AWK validation.

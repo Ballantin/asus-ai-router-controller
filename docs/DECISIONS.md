@@ -12,7 +12,8 @@
 
 - Runtime destination policy agreed: PRESERVE, WITHDRAW_UNSAFE (default), WITHDRAW_UNVERIFIED. Classify installed destinations separately from proposed rules; withdraw only affected mappings in ENFORCE through verified transactions, retain unaffected ordering, restore only after full desired validation. Invalid edits alone never trigger withdrawal. Force is independent. No conntrack flush.
 
+- Runtime selective withdrawal passed regression CI and stock Asuswrt PPPoE hardware acceptance. See [acceptance results](acceptance-tests.md#v040-hardware-acceptance-results).
+
 ## Open
-- Runtime selective withdrawal and WAN read error handling passed regression CI. Hardware acceptance is pending.
 - Pre-commit configuration and state checks are implemented. There is no global native-writer lock or cross-table atomicity.
 - ISP extra-address delivery and real DHCP/offload acceptance pending.

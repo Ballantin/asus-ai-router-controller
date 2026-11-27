@@ -1,4 +1,4 @@
-# Installation — development v0.4.0
+# Installation — v0.4.0
 
 For experienced administrators with local recovery access. Back up router settings before changes. Use a dedicated test window. Do not expose SSH to the WAN.
 

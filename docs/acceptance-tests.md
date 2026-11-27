@@ -70,7 +70,7 @@ Legacy iptables has no observed --wait option. Controller flock only serialises 
 
 ## v0.4.0 hardware acceptance plan
 
-Status: pending. Use the pinned candidate, independent local management, an isolated temporary LAN service and two independent external IPv4 sources. Record the exact candidate and firmware, elapsed times, exit statuses and before/after evidence. Retain addresses, mappings and raw router output privately.
+For repeat testing, use the pinned candidate, independent local management, an isolated temporary LAN service and two independent external IPv4 sources. Record the exact candidate and firmware, elapsed times, exit statuses and before/after evidence. Retain addresses, mappings and raw router output privately.
 
 | Check | Procedure and pass criteria |
 |---|---|
@@ -84,3 +84,14 @@ Status: pending. Use the pinned candidate, independent local management, an isol
 | WAN variants | Repeat applicable checks for DHCP WAN and additional public addresses once their routing is independently confirmed. Record a firmware or network variant as pending until tested. |
 
 Stop enforcement and use the rollback procedure if native rules or traffic regress, management access is impaired, an unauthorised test source succeeds, canonical verification fails or scheduled execution repeatedly times out. A dry-run and successful mock CI establish software checks only. Hardware acceptance requires observed router results.
+
+## v0.4.0 hardware acceptance results
+
+Tested on GT-BE19000AI stock Asuswrt with PPPoE, BusyBox 1.24.1 and iptables 1.4.12.2. Hardware candidate was `958f7f409df746ffb545be0878e4895491d27f59`. The [published release](https://github.com/Ballantin/asus-ai-router-controller/releases/tag/v0.4.0) is tagged at `3cc2fa9a225611fdb145f7a7f11d2638e403bc7d`, with [post-merge regressions passing](https://github.com/Ballantin/asus-ai-router-controller/actions/runs/46004174491).
+
+- Verified live TCP and UDP forwarding, one shared TCP WAN port routing to two distinct LAN hosts by source, and native precedence when Force was enabled. A mobile UDP denial probe did not reach the listener. The permitted control reached the same listener. WAN ingress capture was unavailable.
+- Verified selective and final-rule withdrawal using legacy numbered deletes, reinstatement after route recovery, and empty managed DNAT cleanup.
+- Both managed hooks returned 12.12 seconds after the ASUS firewall restart request. Native FORWARD matched exactly. Native HTTPS and managed DNAT probes succeeded. The full NAT snapshot differed after the rebuild, and a rule-level diff was unavailable.
+- Broadcom hardware counters increased in both directions for a sustained TCP DNAT flow. DISABLED removed both owned chains and jumps while preserving native rules, and the v0.3.0 rollback restored scheduled IN_SYNC.
+
+DHCP WAN and additional routed IPv4 tests are planned for v0.4.5. Full router reboot, offline startup and maximum throughput remain unverified.
