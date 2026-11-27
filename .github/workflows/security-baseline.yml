@@ -31,7 +31,8 @@ jobs:
           shellcheck -s bash ci/*.sh
       - name: Ruff
         if: success() || failure()
-        run: "$RUNNER_TEMP/quality/bin/ruff" check tests/ ci/
+        run: |
+          "$RUNNER_TEMP/quality/bin/ruff" check tests/ ci/
       - name: Bandit
         if: success() || failure()
         run: bash ci/check-scan-report.sh bandit "$RUNNER_TEMP/quality/bin/bandit" -r tests/ ci/ -f json
@@ -83,7 +84,8 @@ jobs:
           exit "$rc"
       - name: GitHub Actions audit
         if: success() || failure()
-        run: "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --min-severity medium .github/workflows/
+        run: |
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --min-severity medium .github/workflows/
       - name: Upload static reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
