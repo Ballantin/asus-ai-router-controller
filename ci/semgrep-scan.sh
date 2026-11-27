@@ -37,6 +37,10 @@ if any(not isinstance(run.get("results"), list) for run in runs):
 if sum(len(run["results"]) for run in runs) != len(results):
     sys.exit("SARIF and JSON finding counts differ")
 print(f"Semgrep scanned {len(scanned)} files; {len(results)} findings")
+print("Semgrep scanned paths:", json.dumps(sorted(scanned)))
+for run in runs:
+    rules = run.get("tool", {}).get("driver", {}).get("rules", [])
+    print("Semgrep SARIF rule IDs:", json.dumps([r["id"] for r in rules]))
 for result in results:
     print(json.dumps(result))
 sys.exit(10 if results else 0)

@@ -55,6 +55,7 @@ jobs:
       contents: read
     outputs:
       semgrep-validated: ${{ steps.semgrep.outputs.validated }}
+      router-policy-validated: ${{ steps.router-policy.outputs.validated }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -77,6 +78,17 @@ jobs:
         run: |
           rc=0
           bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep" || rc=$?
+          if [ "$rc" = 0 ] || [ "$rc" = 10 ]; then
+            echo "validated=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+      - name: Router policy candidate (parallel validation)
+        id: router-policy
+        if: success() || failure()
+        run: |
+          python3 tests/test-router-policy.py "$RUNNER_TEMP/semgrep/bin/semgrep"
+          rc=0
+          python3 ci/router-policy.py || rc=$?
           if [ "$rc" = 0 ] || [ "$rc" = 10 ]; then
             echo "validated=true" >> "$GITHUB_OUTPUT"
           fi
@@ -115,6 +127,13 @@ jobs:
         with:
           sarif_file: reports/semgrep.sarif
           category: semgrep-security
+          wait-for-processing: true
+      - name: Publish validated router policy SARIF
+        if: needs.static-security.outputs.router-policy-validated == 'true'
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4 snapshot
+        with:
+          sarif_file: reports/router-policy.sarif
+          category: router-policy
           wait-for-processing: true
   secrets:
     runs-on: ubuntu-24.04
