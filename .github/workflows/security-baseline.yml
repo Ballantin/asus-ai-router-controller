@@ -44,7 +44,7 @@ jobs:
           bash ci/check-scan-report.sh hadolint docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 hadolint --format json --failure-threshold warning - < docker/Dockerfile
       - name: Upload source reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-quality
           path: scan-reports/
@@ -88,7 +88,7 @@ jobs:
           "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --min-severity medium .github/workflows/
       - name: Upload static reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: static-security
           path: scan-reports/
@@ -153,7 +153,7 @@ jobs:
         run: bash ci/check-scan-report.sh trivy-config docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c config --format json --exit-code 10 /scan
       - name: Upload container reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: container-vulnerabilities
           path: scan-reports/
