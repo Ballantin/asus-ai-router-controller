@@ -27,7 +27,7 @@ opentelemetry-instrumentation-requests==0.46b0
 opentelemetry-instrumentation==0.46b0
 opentelemetry-proto==1.25.0
 opentelemetry-sdk==1.25.0
-opentelemetry-semantic-conventions==0.46b0
+opentelemetry-semantic-conventions==0.66b2
 opentelemetry-util-http==0.46b0
 packaging==26.4
 peewee==3.19.0
