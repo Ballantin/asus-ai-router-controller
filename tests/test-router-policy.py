@@ -2,9 +2,6 @@
 """Inert lexical fixtures; never execute fixture shell commands."""
 
 import importlib.util
-import json
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -47,7 +44,6 @@ def run():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "router").mkdir()
-        (root / "ci").mkdir()
         for name in policy.REQUIRED:
             (root / "router" / name).write_text("#!/bin/sh\n", encoding="utf-8")
         fixture = root / "router/fixture.sh"
@@ -59,31 +55,6 @@ def run():
         results = policy.sarif(report)["runs"][0]["results"]
         check({(r["ruleId"], r["locations"][0]["physicalLocation"]["region"]["startLine"])
                for r in results} == expected, "SARIF findings mismatch")
-
-        # During migration only: compare the exact old custom rules with the
-        # same inert fixtures, including rejected and allowed commands.
-        if len(sys.argv) == 2:
-            # Explicitly anchor the legacy rule paths to the isolated scan root.
-            # Preserve the regexes and scope; only remove targeting ambiguity.
-            config = (ROOT / "ci/semgrep.yml").read_text(encoding="utf-8")
-            (root / "ci/semgrep.yml").write_text(
-                config.replace("router/*.sh", "/router/*.sh"), encoding="utf-8")
-            executable = str(Path(sys.argv[1]).resolve())
-            legacy = subprocess.run(
-                [executable, "scan", "--metrics=off", "--strict", "--error",
-                 "--no-git-ignore", "--project-root", str(root),
-                 "--json", "--output", "legacy.json",
-                 "--config", "ci/semgrep.yml", "router/fixture.sh"],
-                cwd=root, check=False, capture_output=True, text=True)
-            check(legacy.returncode == 1,
-                  f"Legacy scanner exit {legacy.returncode}: {legacy.stderr}")
-            data = json.loads((root / "legacy.json").read_text(encoding="utf-8"))
-            check(not data["errors"], "Legacy scanner returned scan errors")
-            check("router/fixture.sh" in data["paths"]["scanned"], "Legacy fixture not scanned")
-            old = {(f["check_id"].rsplit(".", 1)[-1], f["start"]["line"])
-                   for f in data["results"]}
-            check(old == expected, f"Legacy findings differ: {old} vs {expected}")
-            print(f"Legacy Semgrep parity: {len(expected)} findings, {len(CASES)} fixtures")
 
         fixture.unlink()
         check(not policy.scan(root)["findings"], "clean scripts rejected")

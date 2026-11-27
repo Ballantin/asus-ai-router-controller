@@ -22,3 +22,5 @@
 - Introduce independent advisory CI scanning and review the initial findings before selecting blocking release gates. Never treat a successful advisory scan job as proof of a clean report. No production deployment changes in the baseline branch.
 
 - Owner approved mandatory thresholds in security-assurance.md; five required GitHub Actions checks independently verified on main ruleset. SARIF publication separate and not required for PRs. Root scheduler and current apk package-pinning findings are scoped tracked exceptions, not global suppressions. Security source merge does not authorize hardware deployment or release. Retain mandatory CI when starting v0.4.5.
+
+- Owner approved replacing Semgrep after validated local-rule fixture parity and review of observed registry coverage. Retain mandatory static-security check and router-policy SARIF, other independent scanners and regression safeguards. Local lexical policy is not a general-purpose SAST engine; revisit coverage when introducing new technologies. Remove vulnerable scanner dependencies rather than override constraints or dismiss alerts. Validate standalone candidate and obtain merge approval.
