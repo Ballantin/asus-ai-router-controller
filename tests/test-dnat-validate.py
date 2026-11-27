@@ -48,4 +48,13 @@ esac
                     "br0,lo", "br0,br0", "br0,"]:
         check(["192.168.1.100"], False, allowed)
     check(["192.168.1.100", "192.168.2.100"], False)
+    targets = ["192.168.1.100", "192.168.2.100", "192.168.1.99", "192.168.1.200", "192.168.1.1", "192.168.3.100"]
+    rules = "\n".join("-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 8443 -j DNAT --to-destination " + t for t in targets)
+    result = subprocess.run(["sh", str(validator), "br0", "ppp0", "eth0", "--classify"],
+                            input=rules, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "192.168.1.100|SAFE", "192.168.2.100|UNSAFE",
+        "192.168.1.99|UNVERIFIED", "192.168.1.200|UNVERIFIED",
+        "192.168.1.1|UNSAFE", "192.168.3.100|UNSAFE"], result.stdout + result.stderr
 print("Destination validation tests passed")

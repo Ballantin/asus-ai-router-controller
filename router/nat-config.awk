@@ -91,6 +91,10 @@ BEGIN {
         } else if(f[1]=="EXPECTED_WAN_IP") {
             if(seenip++ || !ipv4(f[2])) reject("invalid or duplicate EXPECTED_WAN_IP")
             expected=f[2]
+        } else if(f[1]=="DNAT_RUNTIME_POLICY") {
+            if(seenpolicy++ || f[2] !~ /^(PRESERVE|WITHDRAW_UNSAFE|WITHDRAW_UNVERIFIED)$/)
+                reject("invalid or duplicate DNAT_RUNTIME_POLICY")
+            runtime_policy=f[2]
         } else if(f[1]=="DNAT_ALLOWED_INTERFACES") {
             if(seenallow++) reject("duplicate DNAT_ALLOWED_INTERFACES")
             n=split(f[2],interfaces,",")
@@ -153,7 +157,8 @@ END {
         if(!seenmode || !seenip) reject("MODE and EXPECTED_WAN_IP required")
         print mode
         print expected
-        if(seenallow) print allowlist
+        print allowlist
+        print (seenpolicy?runtime_policy:"WITHDRAW_UNSAFE")
     } else for(i=1;i<=count;i++) {
         if(kind=="dnat" && metadata==1) print forces[i] "|" lines[i] "|" rules[i]
         else print rules[i]

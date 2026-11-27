@@ -10,7 +10,9 @@
 - Preserve native rules and hardware acceleration; no global conntrack flush. IPv6/hairpin deferred.
 - Version-specific branches for development; explicit approval for release merge; no private deployment information in public history.
 
+- Runtime destination policy agreed: PRESERVE, WITHDRAW_UNSAFE (default), WITHDRAW_UNVERIFIED. Classify installed destinations separately from proposed rules; withdraw only affected mappings in ENFORCE through verified transactions, retain unaffected ordering, restore only after full desired validation. Invalid edits alone never trigger withdrawal. Force is independent. No conntrack flush.
+
 ## Open
-- Runtime destination safety withdrawal vs preserve last applied rules. Proposed in review, not yet accepted.
+- Runtime selective withdrawal implementation and acceptance pending.
 - Multi-file configuration consistency and native concurrent writers: add precommit checks; acknowledge no global native-writer lock or cross-table atomicity.
 - ISP extra-address delivery and real DHCP/offload acceptance pending.

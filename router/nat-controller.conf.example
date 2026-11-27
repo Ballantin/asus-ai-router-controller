@@ -9,6 +9,14 @@
 # duplicates, maximum 32. Only explicitly authorised LAN/VLAN interfaces.
 # Route and local-address validation must also pass; never list WAN or
 # management interfaces. Omission grants no DNAT destination permissions.
+# DNAT_RUNTIME_POLICY: optional, default WITHDRAW_UNSAFE.
+# PRESERVE: retain installed rules on runtime destination failures.
+# WITHDRAW_UNSAFE: withdraw only mappings with confirmed unsafe destinations.
+# WITHDRAW_UNVERIFIED: also withdraw mappings whose safety cannot be verified.
+# Applies to installed mappings in ENFORCE; AUDIT never writes.
+# All proposed mappings must still pass destination validation; Force is
+# independent. Existing conntrack entries may survive withdrawal.
+# Development: policy parsing/classification only until integration.
 # Blank lines and full-line # comments accepted; no inline comments.
 # Invalid configuration leaves existing rules in place.
 # Replace atomically using a sibling .new file and mv.
@@ -17,3 +25,5 @@ MODE=AUDIT
 EXPECTED_WAN_IP=203.0.113.10
 
 DNAT_ALLOWED_INTERFACES=br0
+
+DNAT_RUNTIME_POLICY=WITHDRAW_UNSAFE

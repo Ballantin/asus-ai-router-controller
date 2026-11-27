@@ -8,8 +8,8 @@ Stable main: v0.3.0, 06afeb27fc374d6ebd7f78cf18b9c62c25dc2022. Development branc
 - Initial pre-deployment code review.
 
 ## Next
-1. Resolve runtime safety policy: proposed invalid edits retain existing rules; unsafe already-installed DNAT destinations may require verified withdrawal. Decide before implementing; not yet approved.
-2. Configuration snapshots, inspection error checks and additional race/transaction regression cases implemented in the subsequent hardening commit; CI pending. Still add direct inspection failure injection and resolve runtime withdrawal policy.
+1. Runtime policy agreed: selective withdrawal, configurable PRESERVE / WITHDRAW_UNSAFE (default) / WITHDRAW_UNVERIFIED. Parser and destination classification implemented as first stage; controller integration and CI pending.
+2. Configuration snapshots, inspection error checks and additional race/transaction regression cases implemented in the subsequent hardening commit; CI pending. Still add direct inspection failure injection and integrate runtime withdrawal policy.
 3. Update migration and rollback documentation; validate BusyBox syntax, actual iptables canonicalisation, scheduler timeout and firmware prerequisites.
 4. Draft PR; controlled hardware acceptance with isolated source-restricted services, negative tests, native preservation, restart recovery and hardware offload evidence.
 5. Merge only after explicit approval and acceptance. v0.5.0 telemetry follows.

@@ -4,7 +4,22 @@
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 fail() { echo "DNAT destination validation: $*" >&2; exit 1; }
-[ "$#" -eq 3 ] || fail "expected allowlist, logical WAN and physical WAN"
+[ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "expected allowlist, logical WAN, physical WAN and optional --classify"
+CLASSIFY=0
+if [ "$#" -eq 4 ]; then
+    [ "$4" = --classify ] || fail "invalid classification option"
+    CLASSIFY=1
+fi
+# In classification mode emit one target|status record per destination.
+# Exit nonzero only for invalid input/policy or classifier failure.
+report() {
+    echo "DNAT destination $TARGET: $1 ($2)" >&2
+    if [ "$CLASSIFY" = 1 ]; then
+        printf '%s|%s\n' "$TARGET" "$1"
+    else
+        [ "$1" = SAFE ] || exit 1
+    fi
+}
 ALLOW="$1"
 WAN="$2"
 PHYSICAL="$3"
@@ -39,11 +54,15 @@ TARGETS="$(printf '%s\n' "$RULES" | awk '
         if(!seen[t[1]]++) print t[1]
     }')" || fail "malformed canonical rules"
 [ -n "$TARGETS" ] || fail "no destinations extracted"
-ADDR="$(ip -4 addr show)" || fail "cannot inspect IPv4 addresses"
-[ -n "$ADDR" ] || fail "empty IPv4 address inventory"
-LOCAL="$(ip -4 route show table local)" || fail "cannot inspect local routes"
-[ -n "$LOCAL" ] || fail "empty local route table"
+INVENTORY_OK=1
+ADDR="$(ip -4 addr show)" || INVENTORY_OK=0
+LOCAL="$(ip -4 route show table local)" || INVENTORY_OK=0
+[ -n "$ADDR" ] && [ -n "$LOCAL" ] || INVENTORY_OK=0
 for TARGET in $TARGETS; do
+    if [ "$INVENTORY_OK" = 0 ]; then
+        report UNVERIFIED "address or local-route inventory unavailable"
+        continue
+    fi
     # Check all assigned addresses, not just the destination interface.
     printf '%s\n' "$ADDR" | awk -v dst="$TARGET" '
         $1=="inet" {
@@ -51,34 +70,59 @@ for TARGET in $TARGETS; do
             if(a[1]==dst) bad=1
             for(i=3;i<NF;i++) if($i=="brd" && $(i+1)==dst) bad=1
         }
-        END {exit bad+0}
-    ' || fail "$TARGET is router-local or broadcast"
+        END {exit (bad?10:0)}
+    '
+    RC=$?
+    if [ "$RC" != 0 ]; then
+        if [ "$RC" = 10 ]; then report UNSAFE "router-local or broadcast"
+        else report UNVERIFIED "address inspection failed"; fi
+        continue
+    fi
     printf '%s\n' "$LOCAL" | awk -v dst="$TARGET" '
         ($1=="local" || $1=="broadcast" || $1=="anycast") &&
         ($2==dst || $2==dst "/32") {bad=1}
-        END {exit bad+0}
-    ' || fail "$TARGET has a local/broadcast route"
-    ROUTE="$(ip -4 route get "$TARGET")" || fail "route lookup failed for $TARGET"
+        END {exit (bad?10:0)}
+    '
+    RC=$?
+    if [ "$RC" != 0 ]; then
+        if [ "$RC" = 10 ]; then report UNSAFE "local/broadcast route"
+        else report UNVERIFIED "local route inspection failed"; fi
+        continue
+    fi
+    if ! ROUTE="$(ip -4 route get "$TARGET")"; then
+        report UNVERIFIED "route lookup failed"
+        continue
+    fi
     DEV="$(printf '%s\n' "$ROUTE" | awk -v dst="$TARGET" '
         NR==1 {
             if($1!=dst) exit 1
             for(i=2;i<=NF;i++) {
-                if($i=="via" || $i=="linkdown" || $i=="dead") exit 1
+                if($i=="via") exit 10
+                if($i=="linkdown" || $i=="dead") exit 1
                 if($i=="dev") {if(++n!=1 || i==NF) exit 1; dev=$(i+1)}
             }
             if(n!=1) exit 1
             print dev
         }
         END {if(NR==0) exit 1}
-    ')" || fail "$TARGET is not directly routed"
+    ')"
+    RC=$?
+    if [ "$RC" != 0 ]; then
+        if [ "$RC" = 10 ]; then report UNSAFE "indirect route"
+        else report UNVERIFIED "route unavailable or unsupported"; fi
+        continue
+    fi
     case ",$ALLOW," in
         *,"$DEV",*) ;;
-        *) fail "$TARGET routes through unauthorised interface $DEV" ;;
+        *) report UNSAFE "unauthorised interface $DEV"; continue ;;
     esac
     # Confirm target is inside an assigned subnet on the selected interface,
     # and is neither its network nor directed broadcast address.
     # /31 and /32 are deliberately unsupported in this initial LAN policy.
-    IFADDR="$(ip -4 addr show dev "$DEV")" || fail "cannot inspect $DEV"
+    if ! IFADDR="$(ip -4 addr show dev "$DEV")"; then
+        report UNVERIFIED "cannot inspect $DEV"
+        continue
+    fi
     printf '%s\n' "$IFADDR" | awk -v dst="$TARGET" '
         function num(s,a) {
             split(s,a,"[.]")
@@ -87,12 +131,17 @@ for TARGET in $TARGETS; do
         $1=="inet" {
             split($2,a,"/")
             if(a[2] !~ /^[0-9]+$/ || a[2]<1 || a[2]>30) next
+            observed=1
             size=2^(32-a[2])
             base=int(num(a[1])/size)*size
             if(num(dst)>base && num(dst)<base+size-1) good=1
             if(num(dst)==base || num(dst)==base+size-1) bad=1
         }
-        END {exit (!good || bad)}
-    ' || fail "$TARGET is not a usable host on $DEV"
+        END {exit (bad?10:good?0:observed?10:1)}
+    '
+    RC=$?
+    if [ "$RC" = 10 ]; then report UNSAFE "not a usable host on $DEV"
+    elif [ "$RC" != 0 ]; then report UNVERIFIED "subnet inspection unavailable"
+    else report SAFE "authorised directly connected host"; fi
 done
-echo "DNAT destinations validated"
+[ "$CLASSIFY" = 1 ] || echo "DNAT destinations validated"

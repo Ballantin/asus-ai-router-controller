@@ -33,7 +33,8 @@ bad '0|invalid|any|tcp|443|WAN_IP'
 bad '1|192.168.1.100|any|tcp|443|$(id)'
 [ "$(awk -v kind=general -f "$P" router/nat-controller.conf.example)" = 'AUDIT
 203.0.113.10
-br0' ]
+br0
+WITHDRAW_UNSAFE' ]
 if printf 'MODE=AUDIT\nMODE=ENFORCE\nEXPECTED_WAN_IP=203.0.113.10\n' | awk -v kind=general -f "$P" >/dev/null 2>&1; then exit 1; fi
 check '1|192.168.1.100|any|tcp|443:443|WAN_IP' '-A AI_NAT_SNAT -s 192.168.1.100/32 -o ppp0 -p tcp -m tcp --dport 443 -j SNAT --to-source 203.0.113.10'
 check '# comment
@@ -100,6 +101,14 @@ meta="$(printf '%s\n' '# header' '1|WAN_IP|any|both|80,81|192.168.1.100|same|1' 
 1|2
 1|2
 0|4' ]
+for policy in PRESERVE WITHDRAW_UNSAFE WITHDRAW_UNVERIFIED; do
+    got="$(printf '%s\n' 'MODE=AUDIT' 'EXPECTED_WAN_IP=203.0.113.10' "DNAT_RUNTIME_POLICY=$policy" | awk -v kind=general -f "$P")"
+    [ "$(printf '%s\n' "$got" | sed -n '4p')" = "$policy" ]
+done
+for invalid in 'DNAT_RUNTIME_POLICY=invalid' 'DNAT_RUNTIME_POLICY=' 'DNAT_RUNTIME_POLICY=PRESERVE
+DNAT_RUNTIME_POLICY=WITHDRAW_UNSAFE'; do
+    if printf '%s\n' 'MODE=AUDIT' 'EXPECTED_WAN_IP=203.0.113.10' "$invalid" | awk -v kind=general -f "$P" >/dev/null 2>&1; then exit 1; fi
+done
 sh -n router/nat-controller.sh
 sh -n router/wan-check.sh
 echo 'Parser regression tests passed'
