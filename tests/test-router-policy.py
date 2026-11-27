@@ -3,7 +3,6 @@
 
 import importlib.util
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -64,14 +63,20 @@ def run():
         # During migration only: compare the exact old custom rules with the
         # same inert fixtures, including rejected and allowed commands.
         if len(sys.argv) == 2:
-            shutil.copyfile(ROOT / "ci/semgrep.yml", root / "ci/semgrep.yml")
+            # Explicitly anchor the legacy rule paths to the isolated scan root.
+            # Preserve the regexes and scope; only remove targeting ambiguity.
+            config = (ROOT / "ci/semgrep.yml").read_text(encoding="utf-8")
+            (root / "ci/semgrep.yml").write_text(
+                config.replace("router/*.sh", "/router/*.sh"), encoding="utf-8")
             executable = str(Path(sys.argv[1]).resolve())
             legacy = subprocess.run(
                 [executable, "scan", "--metrics=off", "--strict", "--error",
-                 "--no-git-ignore", "--json", "--output", "legacy.json",
-                 "--config", "ci/semgrep.yml", "router"],
+                 "--no-git-ignore", "--project-root", str(root),
+                 "--json", "--output", "legacy.json",
+                 "--config", "ci/semgrep.yml", "router/fixture.sh"],
                 cwd=root, check=False, capture_output=True, text=True)
-            check(legacy.returncode == 1, f"Legacy scanner failed: {legacy.stderr}")
+            check(legacy.returncode == 1,
+                  f"Legacy scanner exit {legacy.returncode}: {legacy.stderr}")
             data = json.loads((root / "legacy.json").read_text(encoding="utf-8"))
             check(not data["errors"], "Legacy scanner returned scan errors")
             check("router/fixture.sh" in data["paths"]["scanned"], "Legacy fixture not scanned")
