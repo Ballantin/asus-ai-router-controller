@@ -1,5 +1,30 @@
 # Security scanning and quality assurance
 
+## Current policy and acceptance checkpoint — 2026-11-27
+
+This section supersedes the historical baseline and investigation sections below. The security implementation is accepted at `c8131b04eb892a4ea6e98079f5cf45714075ed71`; documentation closure is subject to normal PR review and CI. No production deployment or new release is authorized.
+
+| Control | Current blocking policy |
+| --- | --- |
+| ShellCheck | Any finding in production/test POSIX shell or CI Bash wrappers |
+| Ruff | Any finding in tests or CI Python |
+| Bandit | Medium/high in tests and CI Python |
+| Hadolint | Warning/error except scoped DL3018 on Dockerfile line 2 |
+| Router safety policy | Any violation or scan failure; three local lexical rules |
+| zizmor | Medium or higher; offline |
+| Gitleaks | Any detected secret in reachable history |
+| Trivy image | High/critical package findings |
+| Trivy config | High/critical except scoped DS-0002 HIGH on scheduler Dockerfile |
+| Regression and scanner execution | Any failure |
+
+Required checks: `regression`, `source-quality`, `static-security`, `secrets`, `container-vulnerabilities`. Main ruleset 28239782 independently verified active, strict and without bypass actors. Release tag ruleset 28240927 was independently verified earlier in the workstream. Owner confirmed mandatory full-length Actions SHA enforcement, private reporting, immutable releases and native security settings; admin endpoints unavailable to connector. Subsequent repository workflows and managed analysis passed under SHA enforcement. SARIF publishing remains a separate contents-read/security-events-write job on push/schedule/manual only, with no PR execution. Dependabot alerts/security updates remain enabled; routine Python version PRs disabled in favor of coordinated resolution, Actions grouped, Docker limited to one routine PR. No automatic merges or deployments.
+
+Post-merge evidence: regression 46026198599, security 46026199022, managed analysis 46026198790 and dependency graph 46026213706 all passed. Logs: eight suites, 814 parser cases, eight Compose negative controls, scanner gate controls, 16 router command fixtures and missing/invalid source controls; router policy three scripts/three rules zero findings; ShellCheck/Ruff clean; Bandit 95 low advisories; Hadolint one advisory; Trivy image zero reported vulnerabilities and config two advisories; zizmor zero reported/six suppressed; Gitleaks no detected leaks in 45 reachable commits; router-policy SARIF processed. Owner screenshot after graph refresh: zero open Dependabot alerts, 11 closed Fixed (two high, eight moderate, one low), zero dismissed. Earlier owner screenshots showed no code scanning or secret scanning alerts; final dashboard counts for those two were not independently refreshed. PR #14 closed as superseded, not an alert dismissal; only #7 Alpine upgrade remained open.
+
+Continuing limitations: lexical router policy is not a full shell parser or general SAST engine. Three local rules agreed on nine unsafe/seven safe fixtures; two non-custom legacy multilang rule identities remain unestablished. Reassess coverage on new languages/configurations. Bandit low findings remain visible (test patterns); DL3018 and DS-0002 are scoped exceptions; DS-0026 remains low. Offline zizmor cannot perform token-dependent audits. Version pins are not hash locks or provenance attestations; runner/base image/package repositories and vulnerability intelligence change. CI scans a newly built ARM64 image, not deployed image or firmware. Hosted AWK and mocks are not hardware acceptance. Zero open alerts and successful checks are point-in-time evidence, not a guarantee of security. Review advisories and scanner pins each milestone, investigate new findings promptly, preserve mandatory checks and documented exception scope. Non-root scheduler, healthcheck, reproducible image delivery and hardware acceptance remain tracked engineering tasks.
+
+The following sections preserve chronological investigation history; superseded scanner instructions are not current operating procedures.
+
 ## Baseline phase
 
 The Security baseline workflow is separate from existing functional regressions. Runs on development/main pushes, pull requests and manual dispatch; weekly scanning begins when the workflow is on the default branch. Findings are advisory during baseline collection. Unexpected scanner failures are errors, not evidence of a clean scan. Review every scanner output and distinguish findings, skipped inputs and operational failures; some tools share exit codes for findings and errors. GitHub job success does not mean zero vulnerabilities.
