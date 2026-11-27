@@ -38,9 +38,47 @@ function port(s,a,n) {
     if(n==2 && (!uint(a[2],65535) || a[2]+0<a[1]+0)) reject("invalid port range")
     return n==2 && a[1]+0==a[2]+0?a[1]:s
 }
+# Numeric network interval for overlap checking (IPv4 fits exactly in awk doubles).
+function ipnum(s, a) {
+    split(s,a,"[.]")
+    return ((a[1]*256+a[2])*256+a[3])*256+a[4]
+}
+function hostaddr(s, a) {
+    if(!ipv4(s)) return 0
+    split(s,a,"[.]")
+    return a[1]>0 && a[1]!=127 && a[1]<224 && !(a[1]==169 && a[2]==254)
+}
+function iface(s) {
+    return s ~ /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/ && length(s)<=15
+}
+function dnat_rule(proto, p, lo, hi, net, bits, low, high, i, r, a) {
+    split(p,a,":")
+    lo=a[1]+0
+    hi=(a[2]==""?lo:a[2]+0)
+    split(src,a,"/")
+    low=ipnum(a[1])
+    high=low+2^(32-a[2])-1
+    for(i=1;i<=count;i++)
+        if(dip[i]==public_ip && dproto[i]==proto && lo<=dhi[i] && hi>=dlo[i] && low<=dhigh[i] && high>=dlow[i])
+            reject("overlapping enabled DNAT mappings")
+    if(count>=4096) reject("too many expanded DNAT rules (maximum 4096)")
+    r="-A AI_NAT_DNAT"
+    if(src!="0.0.0.0/0") r=r " -s " src
+    r=r " -d " public_ip "/32 -i " wan_if " -p " proto " -m " proto " --dport " p " -j DNAT --to-destination " target
+    if(f[7]!="same") r=r ":" f[7]
+    rules[++count]=r
+    forces[count]=f[8]
+    lines[count]=FNR
+    dip[count]=public_ip
+    dproto[count]=proto
+    dlo[count]=lo
+    dhi[count]=hi
+    dlow[count]=low
+    dhigh[count]=high
+}
 BEGIN {
-    if(kind!="general" && kind!="snat") reject("invalid parser mode")
-    if(kind=="snat" && (!ipv4(wan_ip) || wan_if !~ /^[a-zA-Z0-9_.-]+$/ || length(wan_if)>15))
+    if(kind!="general" && kind!="snat" && kind!="dnat") reject("invalid parser mode")
+    if((kind=="snat" || kind=="dnat") && (!ipv4(wan_ip) || wan_if !~ /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/ || length(wan_if)>15))
         reject("invalid WAN parameters")
 }
  /^[ \t]*($|#)/ {next}
@@ -53,11 +91,45 @@ BEGIN {
         } else if(f[1]=="EXPECTED_WAN_IP") {
             if(seenip++ || !ipv4(f[2])) reject("invalid or duplicate EXPECTED_WAN_IP")
             expected=f[2]
+        } else if(f[1]=="DNAT_RUNTIME_POLICY") {
+            if(seenpolicy++ || f[2] !~ /^(PRESERVE|WITHDRAW_UNSAFE|WITHDRAW_UNVERIFIED)$/)
+                reject("invalid or duplicate DNAT_RUNTIME_POLICY")
+            runtime_policy=f[2]
+        } else if(f[1]=="DNAT_ALLOWED_INTERFACES") {
+            if(seenallow++) reject("duplicate DNAT_ALLOWED_INTERFACES")
+            n=split(f[2],interfaces,",")
+            if(n<1 || n>32) reject("invalid interface list")
+            for(i=1;i<=n;i++)
+                if(!iface(interfaces[i]) || interfaces[i]=="lo" || interfaces[i] in allowed)
+                    reject("invalid or duplicate allowed interface")
+                else allowed[interfaces[i]]=1
+            allowlist=f[2]
         } else reject("unknown configuration key")
         next
     }
-    if($0 ~ /[ \t\r]/ || split($0,f,"[|]")!=6) reject("expected six pipe-delimited fields")
+    if($0 ~ /[ \t\r]/ || split($0,f,"[|]")!=(kind=="dnat"?8:6)) reject("incorrect number of pipe-delimited fields")
     if(f[1] !~ /^(0|1)$/) reject("invalid enabled flag")
+    if(kind=="dnat") {
+        if(f[8] !~ /^(0|1)$/) reject("invalid Force flag")
+        public_ip=(f[2]=="WAN_IP"?wan_ip:f[2])
+        if(!hostaddr(public_ip)) reject("invalid external IPv4 address")
+        src=(f[3]=="any"?"0.0.0.0/0":cidr(f[3]))
+        if(f[4] !~ /^(tcp|udp|both)$/) reject("DNAT requires tcp, udp or both")
+        n=split(f[5],ports,",")
+        if(n<1 || n>256) reject("invalid port list (maximum 256 entries)")
+        target=f[6]
+        if(!hostaddr(target)) reject("invalid internal IPv4 address")
+        if(f[7]!="same" && (!uint(f[7],65535) || f[7]+0<1)) reject("invalid internal port")
+        for(k=1;k<=n;k++) {
+            pp=port(ports[k])
+            if(f[7]!="same" && (n!=1 || ports[k] ~ /:/)) reject("translated port requires one external port")
+            if(f[1]=="1") {
+                if(f[4]!="udp") dnat_rule("tcp",pp)
+                if(f[4]!="tcp") dnat_rule("udp",pp)
+            }
+        }
+        next
+    }
     src=cidr(f[2])
     dst=(f[3]=="any"?"0.0.0.0/0":cidr(f[3]))
     proto=f[4]
@@ -85,5 +157,10 @@ END {
         if(!seenmode || !seenip) reject("MODE and EXPECTED_WAN_IP required")
         print mode
         print expected
-    } else for(i=1;i<=count;i++) print rules[i]
+        print allowlist
+        print (seenpolicy?runtime_policy:"WITHDRAW_UNSAFE")
+    } else for(i=1;i<=count;i++) {
+        if(kind=="dnat" && metadata==1) print forces[i] "|" lines[i] "|" rules[i]
+        else print rules[i]
+    }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 — in development
+- Add standalone DNAT parser mode, documented disabled-by-default template and parser tests.
+- Add destination safety, native conflict analysis and per-rule Force override.
+- Integrate both managed chains into a single drift-based NAT transaction. Hardware acceptance pending.
+
 ## 0.3.0 — 2026-11-26 (experimental, hardware acceptance completed)
 - External general and ordered SNAT configuration with documented templates and strict AWK validation.
 - Parser and mocked transaction regression tests; CI workflow.

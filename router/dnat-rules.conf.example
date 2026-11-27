@@ -1,0 +1,28 @@
+# AI Board NAT Controller — DNAT configuration v0.4.0 (development)
+# Enabled|PublicIP|SourceIP|Protocol|ExternalPort|InternalIP|InternalPort|Force
+# Enabled: 1 enabled, 0 disabled (still syntax-checked).
+# PublicIP: WAN_IP or explicit IPv4; ISP routing/ownership not verified.
+# SourceIP: any, IPv4 or network-aligned IPv4 CIDR.
+# Protocol: tcp, udp, both (expands TCP then UDP for each port entry).
+# ExternalPort: 1–65535, inclusive colon range, or comma-separated list
+# of ports/ranges (maximum 256 entries per line).
+# InternalIP: single IPv4 host; must pass destination route validation.
+# InternalPort: same (preserve port) or one numeric port for a single
+# external port only. No port translation of lists or ranges.
+# Force: 0 strict (recommended), 1 override native conflict findings only.
+# Forced rules still undergo all syntax, overlap, destination and integrity
+# checks. Native precedence is unchanged: an existing native mapping may
+# shadow a forced rule. Warnings identify the configuration line.
+# Force does not prove the mapping works or override native firewall policy.
+# All fields mandatory, no whitespace, no inline comments or leading
+# zeroes in numeric fields. Blank lines and full-line comments allowed.
+# Enabled rules retain file order; overlapping public IP/protocol/port/
+# source networks are rejected. Disjoint source networks may coexist.
+# Maximum 4096 expanded enabled rules; invalid file emits no rules.
+# Disabled rules do not reserve endpoints. Replace atomically with mv.
+# Native forwarding takes precedence; no filter modifications planned.
+# No hairpin or IPv6 support. All examples disabled. Experimental engine:
+# start in AUDIT; do not enable live mappings until hardware acceptance.
+0|WAN_IP|any|tcp|8443|192.168.1.100|443|0
+0|203.0.113.11|any|both|2456:2458|192.168.1.101|same|0
+0|203.0.113.11|198.51.100.0/24|udp|4950,4955|192.168.1.102|same|0
