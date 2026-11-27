@@ -54,11 +54,13 @@ jobs:
       - name: Install scanners
         run: |
           python3 -m venv "$RUNNER_TEMP/semgrep"
-          "$RUNNER_TEMP/semgrep/bin/pip" install 'semgrep==1.125.0'
+          "$RUNNER_TEMP/semgrep/bin/pip" install 'semgrep==1.125.0' 'setuptools==80.9.0'
+          "$RUNNER_TEMP/semgrep/bin/python" -c 'import pkg_resources'
+          "$RUNNER_TEMP/semgrep/bin/semgrep" --version
           python3 -m venv "$RUNNER_TEMP/zizmor"
           "$RUNNER_TEMP/zizmor/bin/pip" install 'zizmor==1.11.0'
       - name: Semgrep security audit
-        run: bash ci/advisory-scan.sh semgrep 1 "$RUNNER_TEMP/semgrep/bin/semgrep" scan --metrics=off --strict --error --config p/security-audit --config ci/semgrep.yml router docker tests
+        run: bash ci/advisory-scan.sh semgrep 10 bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep"
       - name: GitHub Actions audit
         if: success() || failure()
         run: bash ci/advisory-scan.sh zizmor 11,12,13,14 "$RUNNER_TEMP/zizmor/bin/zizmor" --offline .github/workflows/

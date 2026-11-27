@@ -24,6 +24,8 @@ NATIVE="$RUNTIME/nat-snapshot"
 GENERAL_COPY="$RUNTIME/general.conf"
 SNAT_COPY="$RUNTIME/snat.conf"
 DNAT_COPY="$RUNTIME/dnat.conf"
+# Cleanup is invoked by EXIT trap, not by a direct call.
+# shellcheck disable=SC2317
 cleanup() { rm -f "$META" "$NATIVE" "$GENERAL_COPY" "$SNAT_COPY" "$DNAT_COPY"; }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
@@ -156,8 +158,9 @@ runtime_safety() {
         fail "Runtime withdrawal transaction validation failed"
     NOW_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot recheck runtime WAN interface"
     NOW_PHYS="$(nvram get wan0_ifname)" || fail "Cannot recheck runtime physical WAN"
-    [ "$NOW_IF" = "$WAN_IF" ] && [ "$NOW_PHYS" = "$WAN_PHYS" ] ||
+    if [ "$NOW_IF" != "$WAN_IF" ] || [ "$NOW_PHYS" != "$WAN_PHYS" ]; then
         fail "WAN interfaces changed during runtime withdrawal"
+    fi
     RECHECK="$(runtime_plan "$INSTALLED")" || fail "Runtime withdrawal reclassification failed"
     [ "$PLAN" = "$RECHECK" ] || fail "Runtime destination classification changed"
     cmp -s "$GENERAL_COPY" "$BASE/nat-controller.conf" ||
@@ -284,8 +287,9 @@ if [ "$MODE" != DISABLED ]; then
     "$BASE/wan-check.sh" || fail "WAN changed before commit"
     NOW_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot recheck WAN interface"
     NOW_IP="$(nvram get wan0_ipaddr)" || fail "Cannot recheck WAN IP"
-    [ "$NOW_IF" = "$WAN_IF" ] && [ "$NOW_IP" = "$WAN_IP" ] ||
+    if [ "$NOW_IF" != "$WAN_IF" ] || [ "$NOW_IP" != "$WAN_IP" ]; then
         fail "WAN changed before commit"
+    fi
     if [ -n "$DNAT_DESIRED" ]; then
         NOW_PHYS="$(nvram get wan0_ifname)" || fail "Cannot recheck physical WAN"
         [ "$NOW_PHYS" = "$WAN_PHYS" ] || fail "Physical WAN changed before commit"

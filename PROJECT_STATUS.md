@@ -11,3 +11,5 @@
 ## Security baseline workstream
 
 Independent branch `develop/security-hardening` from the post-release v0.4.0 main checkpoint. Advisory scan workflow, local rules, Dependabot configuration and security baseline documentation added; first scanner execution and findings review pending. Production router and release unchanged. DHCP and routed-address acceptance remain a separate v0.4.5 milestone.
+
+Security baseline #2 (46009253244) and regression #29 passed workflow execution at 93c9f9c; log review found Semgrep startup failure misclassified as advisory, 15 package findings, two Dockerfile findings, and test-only/quality findings. First remediation addresses scanner validity, shell clarity and test quality, and requests updated Alpine packages. Rescan pending; no production deployment.
