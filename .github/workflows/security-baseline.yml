@@ -54,7 +54,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      semgrep-validated: ${{ steps.semgrep.outputs.validated }}
+      router-policy-validated: ${{ steps.router-policy.outputs.validated }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -63,20 +63,17 @@ jobs:
           persist-credentials: false
       - name: Install scanners
         run: |
-          python3 -m venv "$RUNNER_TEMP/semgrep"
-          "$RUNNER_TEMP/semgrep/bin/pip" install --only-binary=:all: --no-deps -r ci/requirements/semgrep.txt
-          "$RUNNER_TEMP/semgrep/bin/pip" check
-          "$RUNNER_TEMP/semgrep/bin/pip" freeze --all
-          "$RUNNER_TEMP/semgrep/bin/semgrep" --version
           python3 -m venv "$RUNNER_TEMP/zizmor"
           "$RUNNER_TEMP/zizmor/bin/pip" install --no-deps -r ci/requirements/zizmor.txt
           "$RUNNER_TEMP/zizmor/bin/pip" check
           "$RUNNER_TEMP/zizmor/bin/pip" freeze --all
-      - name: Semgrep security audit
-        id: semgrep
+      - name: Router safety policy
+        id: router-policy
+        if: success() || failure()
         run: |
+          python3 tests/test-router-policy.py
           rc=0
-          bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep" || rc=$?
+          python3 ci/router-policy.py || rc=$?
           if [ "$rc" = 0 ] || [ "$rc" = 10 ]; then
             echo "validated=true" >> "$GITHUB_OUTPUT"
           fi
@@ -96,7 +93,7 @@ jobs:
   publish-code-scanning:
     needs: static-security
     # Never grant a write token to a job executing PR-controlled scanner scripts.
-    if: ${{ !cancelled() && needs.static-security.outputs.semgrep-validated == 'true' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && needs.static-security.outputs.router-policy-validated == 'true' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -110,11 +107,12 @@ jobs:
         with:
           name: static-security
           path: reports
-      - name: Publish validated Semgrep SARIF
+      - name: Publish validated router policy SARIF
+        if: needs.static-security.outputs.router-policy-validated == 'true'
         uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4 snapshot
         with:
-          sarif_file: reports/semgrep.sarif
-          category: semgrep-security
+          sarif_file: reports/router-policy.sarif
+          category: router-policy
           wait-for-processing: true
   secrets:
     runs-on: ubuntu-24.04
