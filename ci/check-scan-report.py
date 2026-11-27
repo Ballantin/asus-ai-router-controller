@@ -68,7 +68,10 @@ def evaluate(kind, data, rc):
 
 def main():
     kind, filename, rc = sys.argv[1:]
-    blocked, advisory = evaluate(kind, json.loads(Path(filename).read_text()), int(rc))
+    try:
+        blocked, advisory = evaluate(kind, json.loads(Path(filename).read_text()), int(rc))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        sys.exit(f"{kind}: scanner/report failure (exit {rc}): {error}")
     for item in advisory:
         print("ADVISORY:", item)
     for item in blocked:

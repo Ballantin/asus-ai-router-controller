@@ -41,7 +41,7 @@ jobs:
         run: |
           docker pull hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
           docker image inspect --format '{{json .RepoDigests}}' hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
-          bash ci/check-scan-report.sh hadolint docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 --format json --failure-threshold warning - < docker/Dockerfile
+          bash ci/check-scan-report.sh hadolint docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 hadolint --format json --failure-threshold warning - < docker/Dockerfile
       - name: Upload source reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
