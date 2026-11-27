@@ -34,6 +34,7 @@ GENERAL="$(awk -v kind=general -f "$BASE/nat-config.awk" "$GENERAL_COPY")" ||
 MODE="$(printf '%s\n' "$GENERAL" | sed -n '1p')"
 EXPECTED_WAN_IP="$(printf '%s\n' "$GENERAL" | sed -n '2p')"
 ALLOW="$(printf '%s\n' "$GENERAL" | sed -n '3p')"
+POLICY="$(printf '%s\n' "$GENERAL" | sed -n '4p')"
 case "$MODE" in
     DISABLED|AUDIT|ENFORCE) ;;
     *) fail "Invalid operating mode"
@@ -66,6 +67,109 @@ validate_destinations() {
 read_filter() {
     iptables -t filter -S FORWARD
 }
+SNAPSHOT="$(iptables -t nat -S)" || fail "Cannot inspect NAT table"
+
+# Only exact unconditional jumps from their respective built-in chains
+# are owned. Reject other references, including references between chains.
+check_ownership() {
+    printf '%s\n' "$1" | awk '
+        $1=="-A" {
+            for(i=3;i<NF;i++) {
+                if(($i=="-j" || $i=="-g" || $i=="--jump" || $i=="--goto") &&
+                   ($(i+1)=="AI_NAT_SNAT" || $(i+1)=="AI_NAT_DNAT") &&
+                   $0!="-A POSTROUTING -j AI_NAT_SNAT" &&
+                   $0!="-A PREROUTING -j AI_NAT_DNAT") bad=1
+            }
+        }
+        END {exit bad+0}
+    '
+}
+check_ownership "$SNAPSHOT" || fail "Unexpected references to managed chains"
+# Inspect installed destinations independently, before proposed-rule validation.
+# Only an explicit classification can authorise withdrawal. No raw snapshot
+# rule is re-emitted: delete affected entries by descending rule number.
+runtime_plan() {
+    installed="$1"
+    classes="$(printf '%s\n' "$installed" |
+        "$BASE/dnat-validate.sh" "$ALLOW" "$WAN_IF" "$WAN_PHYS" --classify)" || return 1
+    # Require complete, unique, recognised classification records for every
+    # installed destination. The validator rejects unsupported rule targets.
+    printf '%s\n' "$installed" | awk -v classes="$classes" -v policy="$POLICY" '
+        BEGIN {
+            n=split(classes,records,"\n")
+            for(i=1;i<=n;i++) {
+                if(split(records[i],a,"[|]")!=2 || a[1] in status ||
+                   a[2] !~ /^(SAFE|UNSAFE|UNVERIFIED)$/) {bad=1; exit 1}
+                status[a[1]]=a[2]
+            }
+        }
+        {
+            split($NF,t,":")
+            if(!(t[1] in status)) {bad=1; exit 1}
+            used[t[1]]=1
+            if((status[t[1]]=="UNSAFE" && policy!="PRESERVE") ||
+               (status[t[1]]=="UNVERIFIED" && policy=="WITHDRAW_UNVERIFIED"))
+                remove[NR]=1
+        }
+        END {
+            if(bad) exit 1
+            for(k in status) if(!(k in used)) exit 1
+            for(i=NR;i>=1;i--) if(remove[i]) print i
+        }'
+}
+# Compare full snapshot after removing precisely the indexed DNAT entries.
+# Retain the existing jump and chain (even if empty) for this safety-only
+# transaction. Ordinary desired-state reconciliation handles later cleanup.
+withdraw_expected() {
+    printf '%s\n' "$SNAPSHOT" | awk -v positions="$1" '
+        BEGIN {n=split(positions,a,"\n"); for(i=1;i<=n;i++) remove[a[i]]=1}
+        $1=="-A" && $2=="AI_NAT_DNAT" {if(remove[++idx]) next}
+        {print}'
+}
+runtime_safety() {
+    [ "$MODE" != DISABLED ] || return 0
+    INSTALLED="$(printf '%s\n' "$SNAPSHOT" |
+        awk '$1=="-A" && $2=="AI_NAT_DNAT" {print}')" ||
+        fail "Cannot inspect installed DNAT"
+    [ -n "$INSTALLED" ] || return 0
+    WAN_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot read runtime WAN interface"
+    WAN_PHYS="$(nvram get wan0_ifname)" || fail "Cannot read runtime physical WAN"
+    PLAN="$(runtime_plan "$INSTALLED")" || fail "Installed DNAT classification failed"
+    [ -n "$PLAN" ] || return 0
+    echo "WARNING: Runtime DNAT withdrawal candidate rule numbers:"
+    printf '%s\n' "$PLAN"
+    if [ "$MODE" = AUDIT ]; then
+        echo "Action: None (audit mode)"
+        return 0
+    fi
+    EXPECTED="$(withdraw_expected "$PLAN")" || fail "Cannot calculate withdrawal result"
+    SAFETY_TX="$(
+        echo '*nat'
+        for index in $PLAN; do echo "-D AI_NAT_DNAT $index"; done
+        echo COMMIT
+    )"
+    printf '%s\n' "$SAFETY_TX" | iptables-restore --test --noflush ||
+        fail "Runtime withdrawal transaction validation failed"
+    [ "$(nvram get wan0_gw_ifname)" = "$WAN_IF" ] &&
+    [ "$(nvram get wan0_ifname)" = "$WAN_PHYS" ] ||
+        fail "WAN interfaces changed during runtime withdrawal"
+    RECHECK="$(runtime_plan "$INSTALLED")" || fail "Runtime withdrawal reclassification failed"
+    [ "$PLAN" = "$RECHECK" ] || fail "Runtime destination classification changed"
+    cmp -s "$GENERAL_COPY" "$BASE/nat-controller.conf" ||
+        fail "General configuration changed during runtime withdrawal"
+    CURRENT="$(iptables -t nat -S)" || fail "Cannot recheck NAT before withdrawal"
+    [ "$CURRENT" = "$SNAPSHOT" ] || fail "NAT table changed during runtime withdrawal"
+    printf '%s\n' "$SAFETY_TX" | iptables-restore --noflush ||
+        fail "Runtime withdrawal commit failed"
+    AFTER="$(iptables -t nat -S)" || fail "Cannot verify runtime withdrawal"
+    [ "$AFTER" = "$EXPECTED" ] || fail "Runtime withdrawal verification failed"
+    echo "Status: DNAT_WITHDRAWN"
+    logger -t ai-nat-controller "WARNING: Unsafe or unverified DNAT mappings withdrawn; existing conntrack may survive"
+    # Never mix safety-only withdrawal and desired-state installation in
+    # one cycle. Next cycle independently validates the complete proposal.
+    exit 1
+}
+runtime_safety
 if [ "$MODE" != "DISABLED" ]; then
     cp "$BASE/snat-rules.conf" "$SNAT_COPY" || fail "Invalid SNAT configuration: cannot snapshot"
     cp "$BASE/dnat-rules.conf" "$DNAT_COPY" || fail "Invalid DNAT configuration: cannot snapshot"
@@ -87,24 +191,6 @@ if [ "$MODE" != "DISABLED" ]; then
             fail "Required native DNAT forwarding rule unavailable"
     fi
 fi
-SNAPSHOT="$(iptables -t nat -S)" || fail "Cannot inspect NAT table"
-
-# Only exact unconditional jumps from their respective built-in chains
-# are owned. Reject other references, including references between chains.
-check_ownership() {
-    printf '%s\n' "$1" | awk '
-        $1=="-A" {
-            for(i=3;i<NF;i++) {
-                if(($i=="-j" || $i=="-g" || $i=="--jump" || $i=="--goto") &&
-                   ($(i+1)=="AI_NAT_SNAT" || $(i+1)=="AI_NAT_DNAT") &&
-                   $0!="-A POSTROUTING -j AI_NAT_SNAT" &&
-                   $0!="-A PREROUTING -j AI_NAT_DNAT") bad=1
-            }
-        }
-        END {exit bad+0}
-    '
-}
-check_ownership "$SNAPSHOT" || fail "Unexpected references to managed chains"
 if [ -n "$DNAT_DESIRED" ]; then
     printf '%s\n' "$SNAPSHOT" >"$NATIVE" || fail "Cannot save NAT snapshot"
     awk -v desired_file="$META" -f "$BASE/dnat-conflicts.awk" "$META" "$NATIVE" ||

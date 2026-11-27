@@ -16,9 +16,9 @@
 # Applies to installed mappings in ENFORCE; AUDIT never writes.
 # All proposed mappings must still pass destination validation; Force is
 # independent. Existing conntrack entries may survive withdrawal.
-# Development: policy parsing/classification only until integration.
 # Blank lines and full-line # comments accepted; no inline comments.
-# Invalid configuration leaves existing rules in place.
+# Invalid proposed configuration leaves existing rules in place, except
+# independently identified runtime withdrawal under the selected policy.
 # Replace atomically using a sibling .new file and mv.
 # Documentation address below MUST be replaced locally.
 MODE=AUDIT

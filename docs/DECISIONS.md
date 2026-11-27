@@ -13,6 +13,6 @@
 - Runtime destination policy agreed: PRESERVE, WITHDRAW_UNSAFE (default), WITHDRAW_UNVERIFIED. Classify installed destinations separately from proposed rules; withdraw only affected mappings in ENFORCE through verified transactions, retain unaffected ordering, restore only after full desired validation. Invalid edits alone never trigger withdrawal. Force is independent. No conntrack flush.
 
 ## Open
-- Runtime selective withdrawal implementation and acceptance pending.
+- Runtime selective withdrawal implemented; CI and hardware acceptance pending.
 - Multi-file configuration consistency and native concurrent writers: add precommit checks; acknowledge no global native-writer lock or cross-table atomicity.
 - ISP extra-address delivery and real DHCP/offload acceptance pending.

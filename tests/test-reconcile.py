@@ -31,7 +31,22 @@ with tempfile.TemporaryDirectory() as td:
         shutil.copy(repo / "router" / name, root)
     # Real destination validator is covered separately; inject its failure here.
     validator = root / "dnat-validate.sh"
-    validator.write_text('#!/bin/sh\ncat >/dev/null\n[ ! -f "$MOCK_ROOT/fail-destination" ]\n')
+    validator.write_text("""#!/bin/sh
+if [ "$4" = --classify ]; then
+    awk -v root="$MOCK_ROOT" '
+        {split($NF,t,":"); if(!seen[t[1]]++) {
+            status="SAFE"
+            if((getline value < (root "/class-" t[1]))>0) status=value
+            close(root "/class-" t[1])
+            print t[1] "|" status
+        }}'
+else
+    [ ! -f "$MOCK_ROOT/fail-destination" ] || exit 1
+    awk -v root="$MOCK_ROOT" '
+        {split($NF,t,":"); if((getline value < (root "/class-" t[1]))>0 && value!="SAFE") bad=1; close(root "/class-" t[1])}
+        END {exit bad+0}'
+fi
+""")
     validator.chmod(0o700)
     dnat = root / "dnat-rules.conf"
     dnat.write_text("# empty\n")
@@ -258,4 +273,51 @@ with tempfile.TemporaryDirectory() as td:
     run("Status: DISABLED")
     assert "AI_NAT_SNAT" not in get() and "AI_NAT_DNAT" not in get()
     (root / "wan-offline").unlink()
+    # Selective withdrawal across two destinations, with repeated mappings.
+    put(base)
+    mode("ENFORCE")
+    rules.write_text(valid)
+    multi = good + "1|WAN_IP|any|both|8445|192.168.1.102|same|0\n"
+    dnat.write_text(multi)
+    run("RECONCILED")
+    before = get()
+    n = count()
+    flag = root / "class-192.168.1.102"
+    flag.write_text("UNSAFE\n")
+    mode("AUDIT")
+    run("Runtime DNAT withdrawal candidate", False)
+    assert get() == before and count() == n
+    mode("ENFORCE")
+    with config.open("a") as f:
+        f.write("DNAT_RUNTIME_POLICY=PRESERVE\n")
+    run("DNAT destination validation failed", False)
+    assert get() == before and count() == n
+    mode("ENFORCE")
+    flag.write_text("UNVERIFIED\n")
+    run("DNAT destination validation failed", False)
+    assert get() == before and count() == n
+    flag.write_text("UNSAFE\n")
+    # Bad proposed config must not prevent independent safety withdrawal.
+    dnat.write_text("invalid\n")
+    run("DNAT_WITHDRAWN", False)
+    assert count() == n+1
+    assert get()["AI_NAT_DNAT"] == before["AI_NAT_DNAT"][:1]
+    assert get()["AI_NAT_SNAT"] == before["AI_NAT_SNAT"]
+    assert get()["PREROUTING"] == before["PREROUTING"]
+    assert get()["VSERVER"] == before["VSERVER"]
+    assert "-D AI_NAT_DNAT 3\n-D AI_NAT_DNAT 2" in (root / "last-transaction").read_text()
+    dnat.write_text(multi)
+    run("DNAT destination validation failed", False)
+    assert count() == n+1
+    flag.unlink()
+    run("RECONCILED")
+    assert get() == before
+    flag.write_text("UNVERIFIED\n")
+    with config.open("a") as f:
+        f.write("DNAT_RUNTIME_POLICY=WITHDRAW_UNVERIFIED\n")
+    run("DNAT_WITHDRAWN", False)
+    assert get()["AI_NAT_DNAT"] == before["AI_NAT_DNAT"][:1]
+    flag.unlink()
+    run("RECONCILED")
+    assert get() == before
 print("Mock reconciliation regression tests passed")

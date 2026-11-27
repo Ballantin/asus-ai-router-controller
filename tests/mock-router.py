@@ -55,7 +55,10 @@ for line in lines[1:-1]:
     elif op == "-A":
         data.setdefault(chain, []).append(rule)
     elif op == "-D":
-        data[chain].remove(rule)
+        if len(tail) == 1 and tail[0].isdigit():
+            del data[chain][int(tail[0])-1]
+        else:
+            data[chain].remove(rule)
     elif op == "-I":
         assert tail[0] == "1"
         data[chain].insert(0, " ".join(tail[1:]))
