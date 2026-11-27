@@ -13,7 +13,7 @@ deprecated==3.0.1
 exceptiongroup==1.2.2
 face==26.0.1
 glom==22.1.0
-googleapis-common-protos==1.75.0
+googleapis-common-protos==1.76.0
 idna==3.20
 importlib-metadata==7.1.0
 jsonschema-specifications==2025.9.1
