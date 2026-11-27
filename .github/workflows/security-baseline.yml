@@ -64,10 +64,9 @@ jobs:
       - name: Install scanners
         run: |
           python3 -m venv "$RUNNER_TEMP/semgrep"
-          "$RUNNER_TEMP/semgrep/bin/pip" install --no-deps -r ci/requirements/semgrep.txt
+          "$RUNNER_TEMP/semgrep/bin/pip" install --only-binary=:all: --no-deps -r ci/requirements/semgrep.txt
           "$RUNNER_TEMP/semgrep/bin/pip" check
           "$RUNNER_TEMP/semgrep/bin/pip" freeze --all
-          "$RUNNER_TEMP/semgrep/bin/python" -c 'import pkg_resources'
           "$RUNNER_TEMP/semgrep/bin/semgrep" --version
           python3 -m venv "$RUNNER_TEMP/zizmor"
           "$RUNNER_TEMP/zizmor/bin/pip" install --no-deps -r ci/requirements/zizmor.txt
