@@ -94,6 +94,8 @@ jobs:
         run: |
           docker build --pull --platform linux/arm64 -t router-controller:scan docker/
           docker save router-controller:scan -o "$RUNNER_TEMP/router-controller.tar"
+          # Public build artifact only; allow the capability-restricted scanner to read it.
+          chmod 0444 "$RUNNER_TEMP/router-controller.tar"
       - name: Scan scheduler packages
         run: |
           docker pull aquasec/trivy:0.69.3
