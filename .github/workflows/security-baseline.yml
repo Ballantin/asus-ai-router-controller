@@ -26,19 +26,21 @@ jobs:
           "$RUNNER_TEMP/quality/bin/pip" check
           "$RUNNER_TEMP/quality/bin/pip" freeze --all
       - name: ShellCheck (POSIX shell)
-        run: bash ci/advisory-scan.sh shellcheck 1 shellcheck -s sh router/*.sh tests/*.sh
+        run: |
+          shellcheck -s sh router/*.sh tests/*.sh
+          shellcheck -s bash ci/*.sh
       - name: Ruff
         if: success() || failure()
-        run: bash ci/advisory-scan.sh ruff 1 "$RUNNER_TEMP/quality/bin/ruff" check tests/
+        run: "$RUNNER_TEMP/quality/bin/ruff" check tests/ ci/
       - name: Bandit
         if: success() || failure()
-        run: bash ci/advisory-scan.sh bandit 1 "$RUNNER_TEMP/quality/bin/bandit" -r tests/
+        run: bash ci/check-scan-report.sh bandit "$RUNNER_TEMP/quality/bin/bandit" -r tests/ ci/ -f json
       - name: Hadolint
         if: success() || failure()
         run: |
           docker pull hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
           docker image inspect --format '{{json .RepoDigests}}' hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
-          bash ci/advisory-scan.sh hadolint 1 docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 < docker/Dockerfile
+          bash ci/check-scan-report.sh hadolint docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 --format json --failure-threshold warning - < docker/Dockerfile
       - name: Upload source reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -50,6 +52,8 @@ jobs:
   static-security:
     permissions:
       contents: read
+    outputs:
+      semgrep-validated: ${{ steps.semgrep.outputs.validated }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -69,10 +73,17 @@ jobs:
           "$RUNNER_TEMP/zizmor/bin/pip" check
           "$RUNNER_TEMP/zizmor/bin/pip" freeze --all
       - name: Semgrep security audit
-        run: bash ci/advisory-scan.sh semgrep 10 bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep"
+        id: semgrep
+        run: |
+          rc=0
+          bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep" || rc=$?
+          if [ "$rc" = 0 ] || [ "$rc" = 10 ]; then
+            echo "validated=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
       - name: GitHub Actions audit
         if: success() || failure()
-        run: bash ci/advisory-scan.sh zizmor 11,12,13,14 "$RUNNER_TEMP/zizmor/bin/zizmor" --offline .github/workflows/
+        run: "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --min-severity medium .github/workflows/
       - name: Upload static reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -84,13 +95,16 @@ jobs:
   publish-code-scanning:
     needs: static-security
     # Never grant a write token to a job executing PR-controlled scanner scripts.
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && needs.static-security.outputs.semgrep-validated == 'true' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: static-security
@@ -113,7 +127,7 @@ jobs:
         run: |
           docker pull ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
           docker image inspect --format '{{json .RepoDigests}}' ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
-          bash ci/advisory-scan.sh gitleaks 10 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git --redact=100 --no-banner --exit-code 10 --log-opts=--all /repo
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git --redact=100 --no-banner --exit-code 10 --log-opts=--all /repo
   container-vulnerabilities:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -131,10 +145,10 @@ jobs:
         run: |
           docker pull aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
           docker image inspect --format '{{json .RepoDigests}}' aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
-          bash ci/advisory-scan.sh trivy-image 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/router-controller.tar:/scan/image.tar:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --input /scan/image.tar --scanners vuln --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 10
+          bash ci/check-scan-report.sh trivy-image docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/router-controller.tar:/scan/image.tar:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --input /scan/image.tar --format json --scanners vuln --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 10
       - name: Scan container configuration
         if: success() || failure()
-        run: bash ci/advisory-scan.sh trivy-config 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c config --exit-code 10 /scan
+        run: bash ci/check-scan-report.sh trivy-config docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c config --format json --exit-code 10 /scan
       - name: Upload container reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -19,3 +19,5 @@ Security baseline #3 and regression #30 passed; verified logs show zero ShellChe
 Security baseline #4/regression #31 passed with pinned dependencies. Extended coverage adds normalized Compose security contract/negative controls, deterministic AWK property tests and mock NAT transaction ownership assertions. CI verification pending; no production file changes in this checkpoint.
 
 Regression #33/security baseline #6 passed at 7a8d972: 814 parser executions and eight Compose negative controls, all six suites passed. SECURITY.md and validated Semgrep SARIF publication added; publication CI pending. No production changes.
+
+Security baseline #7/regression #34 passed, including GitHub SARIF upload and processing. Owner approved mandatory gate thresholds; implementation and synthetic negative controls added, validation pending. Branch ruleset still requires regression only until new checks validated and owner updates settings.

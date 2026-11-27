@@ -53,3 +53,22 @@ Regression #32 failed before new checks ran because the mock-router.py executabl
 Regression #33 (46016546843) and security baseline #6 (46016546839) passed at 7a8d972. All six suites passed, including 814 deterministic parser subprocess cases and eight rejected Compose negative controls; mock execution preflight fixed the previous failure. ShellCheck/Ruff/Semgrep zero findings, Gitleaks no leaks in 29 commits, Trivy image zero reported vulnerabilities. Bandit 95 low, zero medium/high; five additional test findings require classification. Other advisories unchanged.
 
 SECURITY.md establishes private disclosure and latest-release/active-development maintenance expectations without promising a response SLA. Semgrep emits JSON and SARIF from the same scan; the wrapper validates JSON, scanner status, SARIF version and matching result counts. A separate publish-code-scanning job downloads the validated artifact and uploads only Semgrep SARIF with category semgrep-security. It has security-events write and contents read; scanner execution remains contents-read only. Publication is restricted to push/schedule/manual runs, not PR events (PRs still generate reports and execute checks). Upload waits for GitHub processing. All actions pinned to commit SHAs. CodeQL default setup remains independent. Do not upload Gitleaks reports or container package findings as source-code alerts. Publication and Code Scanning acceptance must be verified in CI before enforcing gates.
+
+## Mandatory gate policy (owner approved)
+
+Baseline #7 (46017042985), regression #34 (46017042979) passed; Semgrep SARIF uploaded and processing completed. Publication now includes read-only checkout for fingerprints and remains isolated. It can publish validated findings even when Semgrep blocks the scan job. PR publication remains disabled.
+
+| Scanner | Blocking threshold |
+| --- | --- |
+| ShellCheck | Any finding (including Bash CI wrappers) |
+| Ruff | Any finding (tests and CI Python) |
+| Bandit | Medium or high; low findings remain visible |
+| Hadolint | Warning or error, except DL3018 on current Dockerfile line 2 |
+| Semgrep | Any finding |
+| zizmor | Medium or higher (offline audit limitations remain) |
+| Gitleaks | Any detected secret |
+| Trivy image | High or critical |
+| Trivy configuration | High or critical, except DS-0002 high on scheduler Dockerfile |
+| Regression / scanner errors | Any failure |
+
+Bandit baseline #7: 95 low, zero medium/high. Additional test-only findings: B101 assertions in mock, B404 subprocess import, B603 subprocess invocation with controlled argv, B311 deterministic PRNG used for test generation, not cryptography. No global Bandit suppressions. Hadolint DL3018 exception permits fresh Alpine security patches, not arbitrary unpinned scanner dependencies; review with reproducible image delivery. Trivy DS-0002 exception permits existing root scheduler only, mitigated by read-only root/SSH volume, dropped caps and no-new-privileges checked by Compose contract; revisit before scheduler non-root migration and hardware acceptance. DS-0026 remains low advisory; meaningful healthcheck planned. No secret or CVE exceptions. Structured gate reports retain findings; invalid/missing reports and unexpected exit codes fail closed. Negative controls cover thresholds and exception scope. GitHub required checks must be configured after successful validation; do not require publication job for PRs because it is intentionally skipped. Proposed required jobs: regression, source-quality, static-security, secrets, container-vulnerabilities. No production deployment or merge without owner approval.

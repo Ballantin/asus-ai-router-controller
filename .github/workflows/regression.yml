@@ -28,3 +28,5 @@ jobs:
         run: |
           set -o pipefail
           ROUTER_USER=ci-validation docker compose -f docker/docker-compose.yml config --format json | python3 tests/test-compose-security.py
+      - name: Scanner gate negative controls
+        run: python3 tests/test-security-gates.py
