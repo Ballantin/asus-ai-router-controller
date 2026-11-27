@@ -3,11 +3,12 @@
 set -euo pipefail
 mkdir -p scan-reports
 report=scan-reports/semgrep.json
-rm -f "$report"
+sarif=scan-reports/semgrep.sarif
+rm -f "$report" "$sarif"
 rc=0
-"$1" scan --metrics=off --strict --error --json --output "$report" \
+"$1" scan --metrics=off --strict --error --json --output "$report" --sarif-output "$sarif" \
     --config p/security-audit --config ci/semgrep.yml router docker tests || rc=$?
-python3 - "$report" "$rc" <<'PY'
+python3 - "$report" "$rc" "$sarif" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -27,6 +28,14 @@ if errors:
     sys.exit("Semgrep reported scan errors")
 if rc not in (0, 1) or (rc == 1) != bool(results):
     sys.exit(f"Semgrep exit status {rc} inconsistent with report")
+sarif = json.loads(Path(sys.argv[3]).read_text())
+runs = sarif.get("runs")
+if sarif.get("version") != "2.1.0" or not isinstance(runs, list) or not runs:
+    sys.exit("Missing or invalid SARIF output")
+if any(not isinstance(run.get("results"), list) for run in runs):
+    sys.exit("Invalid SARIF results")
+if sum(len(run["results"]) for run in runs) != len(results):
+    sys.exit("SARIF and JSON finding counts differ")
 print(f"Semgrep scanned {len(scanned)} files; {len(results)} findings")
 for result in results:
     print(json.dumps(result))

@@ -48,6 +48,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   static-security:
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -79,6 +81,26 @@ jobs:
           path: scan-reports/
           if-no-files-found: warn
           retention-days: 14
+  publish-code-scanning:
+    needs: static-security
+    # Never grant a write token to a job executing PR-controlled scanner scripts.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: static-security
+          path: reports
+      - name: Publish validated Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4 snapshot
+        with:
+          sarif_file: reports/semgrep.sarif
+          category: semgrep-security
+          wait-for-processing: true
   secrets:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

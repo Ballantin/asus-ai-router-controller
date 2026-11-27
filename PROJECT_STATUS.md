@@ -17,3 +17,5 @@ Security baseline #2 (46009253244) and regression #29 passed workflow execution 
 Security baseline #3 and regression #30 passed; verified logs show zero ShellCheck/Ruff/Semgrep findings, no detected secrets and zero package vulnerabilities in rebuilt ARM64 image. Scanner container digests and observed Python dependency versions pinned in next CI revision; verification pending. GitHub main and release tag rulesets independently verified active, no bypass actors. See docs/security-assurance.md for limitations and remaining tasks.
 
 Security baseline #4/regression #31 passed with pinned dependencies. Extended coverage adds normalized Compose security contract/negative controls, deterministic AWK property tests and mock NAT transaction ownership assertions. CI verification pending; no production file changes in this checkpoint.
+
+Regression #33/security baseline #6 passed at 7a8d972: 814 parser executions and eight Compose negative controls, all six suites passed. SECURITY.md and validated Semgrep SARIF publication added; publication CI pending. No production changes.
