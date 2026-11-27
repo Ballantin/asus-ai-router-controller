@@ -19,9 +19,12 @@ jobs:
       - name: Install scanners
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck
+          sudo apt-get install -y shellcheck=0.9.0-1
+          shellcheck --version
           python3 -m venv "$RUNNER_TEMP/quality"
-          "$RUNNER_TEMP/quality/bin/pip" install 'ruff==0.11.13' 'bandit==1.8.3'
+          "$RUNNER_TEMP/quality/bin/pip" install --no-deps -r ci/requirements/quality.txt
+          "$RUNNER_TEMP/quality/bin/pip" check
+          "$RUNNER_TEMP/quality/bin/pip" freeze --all
       - name: ShellCheck (POSIX shell)
         run: bash ci/advisory-scan.sh shellcheck 1 shellcheck -s sh router/*.sh tests/*.sh
       - name: Ruff
@@ -33,9 +36,9 @@ jobs:
       - name: Hadolint
         if: success() || failure()
         run: |
-          docker pull hadolint/hadolint:v2.12.0-alpine
-          docker image inspect --format '{{json .RepoDigests}}' hadolint/hadolint:v2.12.0-alpine
-          bash ci/advisory-scan.sh hadolint 1 docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine < docker/Dockerfile
+          docker pull hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
+          docker image inspect --format '{{json .RepoDigests}}' hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199
+          bash ci/advisory-scan.sh hadolint 1 docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine@sha256:3c206a451cec6d486367e758645269fd7d696c5ccb6ff59d8b03b0e45268a199 < docker/Dockerfile
       - name: Upload source reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -54,11 +57,15 @@ jobs:
       - name: Install scanners
         run: |
           python3 -m venv "$RUNNER_TEMP/semgrep"
-          "$RUNNER_TEMP/semgrep/bin/pip" install 'semgrep==1.125.0' 'setuptools==80.9.0'
+          "$RUNNER_TEMP/semgrep/bin/pip" install --no-deps -r ci/requirements/semgrep.txt
+          "$RUNNER_TEMP/semgrep/bin/pip" check
+          "$RUNNER_TEMP/semgrep/bin/pip" freeze --all
           "$RUNNER_TEMP/semgrep/bin/python" -c 'import pkg_resources'
           "$RUNNER_TEMP/semgrep/bin/semgrep" --version
           python3 -m venv "$RUNNER_TEMP/zizmor"
-          "$RUNNER_TEMP/zizmor/bin/pip" install 'zizmor==1.11.0'
+          "$RUNNER_TEMP/zizmor/bin/pip" install --no-deps -r ci/requirements/zizmor.txt
+          "$RUNNER_TEMP/zizmor/bin/pip" check
+          "$RUNNER_TEMP/zizmor/bin/pip" freeze --all
       - name: Semgrep security audit
         run: bash ci/advisory-scan.sh semgrep 10 bash ci/semgrep-scan.sh "$RUNNER_TEMP/semgrep/bin/semgrep"
       - name: GitHub Actions audit
@@ -82,9 +89,9 @@ jobs:
           persist-credentials: false
       - name: Scan reachable Git history (redacted)
         run: |
-          docker pull ghcr.io/gitleaks/gitleaks:v8.24.3
-          docker image inspect --format '{{json .RepoDigests}}' ghcr.io/gitleaks/gitleaks:v8.24.3
-          bash ci/advisory-scan.sh gitleaks 10 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3 git --redact=100 --no-banner --exit-code 10 --log-opts=--all /repo
+          docker pull ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+          docker image inspect --format '{{json .RepoDigests}}' ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+          bash ci/advisory-scan.sh gitleaks 10 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git --redact=100 --no-banner --exit-code 10 --log-opts=--all /repo
   container-vulnerabilities:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -100,12 +107,12 @@ jobs:
           chmod 0444 "$RUNNER_TEMP/router-controller.tar"
       - name: Scan scheduler packages
         run: |
-          docker pull aquasec/trivy:0.69.3
-          docker image inspect --format '{{json .RepoDigests}}' aquasec/trivy:0.69.3
-          bash ci/advisory-scan.sh trivy-image 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/router-controller.tar:/scan/image.tar:ro" aquasec/trivy:0.69.3 image --input /scan/image.tar --scanners vuln --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 10
+          docker pull aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          docker image inspect --format '{{json .RepoDigests}}' aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          bash ci/advisory-scan.sh trivy-image 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/router-controller.tar:/scan/image.tar:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --input /scan/image.tar --scanners vuln --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 10
       - name: Scan container configuration
         if: success() || failure()
-        run: bash ci/advisory-scan.sh trivy-config 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3 config --exit-code 10 /scan
+        run: bash ci/advisory-scan.sh trivy-config 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c config --exit-code 10 /scan
       - name: Upload container reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
