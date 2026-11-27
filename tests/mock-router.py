@@ -13,6 +13,8 @@ if cmd == "logger":
     sys.exit(0)
 if cmd == "nvram":
     values = {"wan0_gw_ifname": "ppp0", "wan0_ipaddr": "203.0.113.10", "wan0_ifname": "eth0"}
+    if args[1] == "wan0_ipaddr" and (root / "wan-changed").exists():
+        values[args[1]] = "203.0.113.99"
     print(values[args[1]])
     sys.exit(0)
 data = json.loads(state.read_text())
@@ -21,6 +23,8 @@ if cmd == "iptables":
         print("-P FORWARD ACCEPT")
         if not (root / "no-filter").exists():
             print("-A FORWARD -m conntrack --ctstate DNAT -j ACCEPT")
+        if (root / "filter-changed").exists():
+            print("-A FORWARD -p tcp -j RETURN")
         print("-A FORWARD -j DROP")
         sys.exit(0)
     assert args == ["-t", "nat", "-S"], args
@@ -60,9 +64,25 @@ for line in lines[1:-1]:
 if "--test" in args:
     if (root / "fail-test").exists():
         sys.exit(1)
+    # Simulate independent changes only after the dry-run has succeeded.
+    for event, marker in (("race-wan", "wan-changed"),
+                          ("race-filter", "filter-changed"),
+                          ("race-destination", "fail-destination")):
+        if (root / event).exists():
+            (root / marker).touch()
+    for name in ("nat-controller.conf", "snat-rules.conf", "dnat-rules.conf"):
+        if (root / ("race-" + name)).exists():
+            with (root / name).open("a") as f:
+                f.write("# concurrent edit\n")
+    if (root / "race-nat").exists():
+        original = json.loads(state.read_text())
+        original["POSTROUTING"].append("-p udp -j RETURN")
+        state.write_text(json.dumps(original))
     sys.exit(0)
 if (root / "fail-commit").exists():
     sys.exit(1)
+if (root / "bad-postcommit").exists():
+    data["POSTROUTING"].append("-p tcp -j RETURN")
 state.write_text(json.dumps(data))
 with (root / "commits").open("a") as log:
     log.write("commit\n")

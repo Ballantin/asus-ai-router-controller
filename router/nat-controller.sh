@@ -21,11 +21,15 @@ if ! flock -n 9; then
 fi
 META="$RUNTIME/dnat-metadata"
 NATIVE="$RUNTIME/nat-snapshot"
-cleanup() { rm -f "$META" "$NATIVE"; }
+GENERAL_COPY="$RUNTIME/general.conf"
+SNAT_COPY="$RUNTIME/snat.conf"
+DNAT_COPY="$RUNTIME/dnat.conf"
+cleanup() { rm -f "$META" "$NATIVE" "$GENERAL_COPY" "$SNAT_COPY" "$DNAT_COPY"; }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-GENERAL="$(awk -v kind=general -f "$BASE/nat-config.awk" "$BASE/nat-controller.conf")" ||
+cp "$BASE/nat-controller.conf" "$GENERAL_COPY" || fail "Cannot snapshot general configuration"
+GENERAL="$(awk -v kind=general -f "$BASE/nat-config.awk" "$GENERAL_COPY")" ||
     fail "Invalid general configuration"
 MODE="$(printf '%s\n' "$GENERAL" | sed -n '1p')"
 EXPECTED_WAN_IP="$(printf '%s\n' "$GENERAL" | sed -n '2p')"
@@ -39,6 +43,18 @@ echo "Version: $VERSION"
 echo "Mode: $MODE"
 echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 
+# Parse immutable copies; compare their exact bytes with the live files.
+# DISABLED deliberately requires only the general configuration.
+check_config() {
+    cmp -s "$GENERAL_COPY" "$BASE/nat-controller.conf" ||
+        fail "General configuration changed during reconciliation"
+    if [ "$MODE" != DISABLED ]; then
+        cmp -s "$SNAT_COPY" "$BASE/snat-rules.conf" ||
+            fail "SNAT configuration changed during reconciliation"
+        cmp -s "$DNAT_COPY" "$BASE/dnat-rules.conf" ||
+            fail "DNAT configuration changed during reconciliation"
+    fi
+}
 SNAT_DESIRED=
 DNAT_DESIRED=
 FILTER=
@@ -51,13 +67,16 @@ read_filter() {
     iptables -t filter -S FORWARD
 }
 if [ "$MODE" != "DISABLED" ]; then
+    cp "$BASE/snat-rules.conf" "$SNAT_COPY" || fail "Invalid SNAT configuration: cannot snapshot"
+    cp "$BASE/dnat-rules.conf" "$DNAT_COPY" || fail "Invalid DNAT configuration: cannot snapshot"
+    check_config
     "$BASE/wan-check.sh" || fail "WAN validation failed"
     WAN_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot read WAN interface"
     WAN_IP="$(nvram get wan0_ipaddr)" || fail "Cannot read WAN IP"
     [ "$WAN_IP" = "$EXPECTED_WAN_IP" ] || fail "Configured primary WAN IP mismatch"
-    SNAT_DESIRED="$(awk -v kind=snat -v wan_if="$WAN_IF" -v wan_ip="$WAN_IP" -f "$BASE/nat-config.awk" "$BASE/snat-rules.conf")" ||
+    SNAT_DESIRED="$(awk -v kind=snat -v wan_if="$WAN_IF" -v wan_ip="$WAN_IP" -f "$BASE/nat-config.awk" "$SNAT_COPY")" ||
         fail "Invalid SNAT configuration"
-    awk -v kind=dnat -v metadata=1 -v wan_if="$WAN_IF" -v wan_ip="$WAN_IP" -f "$BASE/nat-config.awk" "$BASE/dnat-rules.conf" >"$META" ||
+    awk -v kind=dnat -v metadata=1 -v wan_if="$WAN_IF" -v wan_ip="$WAN_IP" -f "$BASE/nat-config.awk" "$DNAT_COPY" >"$META" ||
         fail "Invalid DNAT configuration"
     DNAT_DESIRED="$(cut -d '|' -f 3 "$META")" || fail "Cannot extract DNAT rules"
     if [ -n "$DNAT_DESIRED" ]; then
@@ -97,13 +116,13 @@ fi
 inspect() {
     table="$1"; chain="$2"; hook="$3"; position="$4"; wanted="$5"; enabled="$6"
     jump="-A $hook -j $chain"
-    EXISTS="$(printf '%s\n' "$table" | awk -v c="$chain" '$1=="-N" && $2==c {n++} END {print n+0}')"
-    JUMPS="$(printf '%s\n' "$table" | awk -v j="$jump" '$0==j {n++} END {print n+0}')"
-    ACTUAL="$(printf '%s\n' "$table" | awk -v c="$chain" '$1=="-A" && $2==c {print}')"
+    EXISTS="$(printf '%s\n' "$table" | awk -v c="$chain" '$1=="-N" && $2==c {n++} END {print n+0}')" || fail "Cannot inspect managed chain $chain"
+    JUMPS="$(printf '%s\n' "$table" | awk -v j="$jump" '$0==j {n++} END {print n+0}')" || fail "Cannot inspect managed chain $chain"
+    ACTUAL="$(printf '%s\n' "$table" | awk -v c="$chain" '$1=="-A" && $2==c {print}')" || fail "Cannot inspect managed chain $chain"
     EDGE="$(printf '%s\n' "$table" | awk -v h="$hook" -v p="$position" '
         $1=="-A" && $2==h {last=$0; if(p=="first") exit}
         END {if(last!="") print last}
-    ')"
+    ')" || fail "Cannot inspect managed hook $hook"
     DRIFT=1
     if [ "$enabled" = 0 ]; then
         if [ "$EXISTS" = 0 ] && [ "$JUMPS" = 0 ] && [ -z "$ACTUAL" ]; then DRIFT=0; fi
@@ -120,6 +139,7 @@ inspect "$SNAPSHOT" "$SNAT" POSTROUTING first "$SNAT_DESIRED" "$SNAT_ENABLED"
 S_EXISTS="$EXISTS"; S_JUMPS="$JUMPS"; S_DRIFT="$DRIFT"
 inspect "$SNAPSHOT" "$DNAT" PREROUTING last "$DNAT_DESIRED" "$DNAT_ENABLED"
 D_EXISTS="$EXISTS"; D_JUMPS="$JUMPS"; D_DRIFT="$DRIFT"
+check_config
 echo "SNAT chain exists: $S_EXISTS; jump count: $S_JUMPS; drift: $S_DRIFT"
 echo "DNAT chain exists: $D_EXISTS; jump count: $D_JUMPS; drift: $D_DRIFT"
 if [ "$S_DRIFT" = 0 ] && [ "$D_DRIFT" = 0 ]; then
@@ -180,6 +200,7 @@ if [ "$MODE" != DISABLED ]; then
         [ "$FILTER_NOW" = "$FILTER" ] || fail "Native FORWARD changed during reconciliation"
     fi
 fi
+check_config
 CURRENT="$(iptables -t nat -S)" || fail "Cannot recheck NAT table"
 [ "$CURRENT" = "$SNAPSHOT" ] || fail "NAT table changed during reconciliation"
 printf '%s\n' "$TRANSACTION" | iptables-restore --noflush ||
@@ -192,7 +213,9 @@ native_rules() {
         {print}
     '
 }
-[ "$(native_rules "$SNAPSHOT")" = "$(native_rules "$AFTER")" ] ||
+NATIVE_BEFORE="$(native_rules "$SNAPSHOT")" || fail "Cannot inspect original unmanaged NAT"
+NATIVE_AFTER="$(native_rules "$AFTER")" || fail "Cannot inspect committed unmanaged NAT"
+[ "$NATIVE_BEFORE" = "$NATIVE_AFTER" ] ||
     fail "Unmanaged NAT configuration changed"
 check_ownership "$AFTER" || fail "Unexpected references after commit"
 inspect "$AFTER" "$SNAT" POSTROUTING first "$SNAT_DESIRED" "$SNAT_ENABLED"

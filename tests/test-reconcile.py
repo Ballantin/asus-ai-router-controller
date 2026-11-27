@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as td:
     dnat = root / "dnat-rules.conf"
     dnat.write_text("# empty\n")
     wan = root / "wan-check.sh"
-    wan.write_text("#!/bin/sh\nexit 0\n")
+    wan.write_text('#!/bin/sh\n[ ! -f "$MOCK_ROOT/wan-offline" ]\n')
     wan.chmod(0o700)
     state = root / "state.json"
     rules = root / "snat-rules.conf"
@@ -211,4 +211,51 @@ with tempfile.TemporaryDirectory() as td:
     before = get()
     run("Unexpected references", False)
     assert get() == before and count() == n
+    # Race and transaction failures with both chains pending.
+    mode("ENFORCE")
+    rules.write_text(valid)
+    dnat.write_text(good)
+    for marker, induced, message in (
+        ("race-wan", "wan-changed", "WAN changed before commit"),
+        ("race-filter", "filter-changed", "Native FORWARD changed"),
+        ("race-destination", "fail-destination", "DNAT destination validation failed"),
+        ("race-nat-controller.conf", None, "General configuration changed"),
+        ("race-snat-rules.conf", None, "SNAT configuration changed"),
+        ("race-dnat-rules.conf", None, "DNAT configuration changed"),
+        ("fail-test", None, "Transaction validation failed"),
+        ("fail-commit", None, "Transaction commit failed"),
+    ):
+        put(base)
+        mode("ENFORCE")
+        rules.write_text(valid)
+        dnat.write_text(good)
+        n = count()
+        (root / marker).touch()
+        run(message, False)
+        assert get() == base and count() == n
+        (root / marker).unlink()
+        if induced:
+            (root / induced).unlink()
+    put(base)
+    (root / "race-nat").touch()
+    n = count()
+    run("NAT table changed during reconciliation", False)
+    assert count() == n
+    assert get()["POSTROUTING"] == [native, "-p udp -j RETURN"]
+    (root / "race-nat").unlink()
+    put(base)
+    # A committed transaction with unexpected native drift reports failure,
+    # not a fictitious rollback.
+    (root / "bad-postcommit").touch()
+    run("Unmanaged NAT configuration changed", False)
+    assert count() == n+1 and "AI_NAT_DNAT" in get()
+    (root / "bad-postcommit").unlink()
+    # DISABLED remains independent of WAN and both rule files.
+    mode("DISABLED")
+    rules.unlink()
+    dnat.unlink()
+    (root / "wan-offline").touch()
+    run("Status: DISABLED")
+    assert "AI_NAT_SNAT" not in get() and "AI_NAT_DNAT" not in get()
+    (root / "wan-offline").unlink()
 print("Mock reconciliation regression tests passed")
