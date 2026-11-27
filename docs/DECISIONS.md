@@ -17,3 +17,6 @@
 ## Open
 - Pre-commit configuration and state checks are implemented. There is no global native-writer lock or cross-table atomicity.
 - ISP extra-address delivery and real DHCP/offload acceptance pending.
+
+## Security assurance
+- Introduce independent advisory CI scanning and review the initial findings before selecting blocking release gates. Never treat a successful advisory scan job as proof of a clean report. No production deployment changes in the baseline branch.

@@ -1,0 +1,112 @@
+name: Security baseline
+on:
+  push:
+    branches: [main, 'develop/**']
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+permissions:
+  contents: read
+jobs:
+  source-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install scanners
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          python3 -m venv "$RUNNER_TEMP/quality"
+          "$RUNNER_TEMP/quality/bin/pip" install 'ruff==0.11.13' 'bandit==1.8.3'
+      - name: ShellCheck (POSIX shell)
+        run: bash ci/advisory-scan.sh shellcheck 1 shellcheck -s sh router/*.sh tests/*.sh
+      - name: Ruff
+        if: success() || failure()
+        run: bash ci/advisory-scan.sh ruff 1 "$RUNNER_TEMP/quality/bin/ruff" check tests/
+      - name: Bandit
+        if: success() || failure()
+        run: bash ci/advisory-scan.sh bandit 1 "$RUNNER_TEMP/quality/bin/bandit" -r tests/
+      - name: Hadolint
+        if: success() || failure()
+        run: |
+          docker pull hadolint/hadolint:v2.12.0-alpine
+          docker image inspect --format '{{json .RepoDigests}}' hadolint/hadolint:v2.12.0-alpine
+          bash ci/advisory-scan.sh hadolint 1 docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges hadolint/hadolint:v2.12.0-alpine < docker/Dockerfile
+      - name: Upload source reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-quality
+          path: scan-reports/
+          if-no-files-found: warn
+          retention-days: 14
+  static-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install scanners
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep"
+          "$RUNNER_TEMP/semgrep/bin/pip" install 'semgrep==1.125.0'
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install 'zizmor==1.11.0'
+      - name: Semgrep security audit
+        run: bash ci/advisory-scan.sh semgrep 1 "$RUNNER_TEMP/semgrep/bin/semgrep" scan --metrics=off --strict --error --config p/security-audit --config ci/semgrep.yml router docker tests
+      - name: GitHub Actions audit
+        if: success() || failure()
+        run: bash ci/advisory-scan.sh zizmor 11,12,13,14 "$RUNNER_TEMP/zizmor/bin/zizmor" --offline .github/workflows/
+      - name: Upload static reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: static-security
+          path: scan-reports/
+          if-no-files-found: warn
+          retention-days: 14
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan reachable Git history (redacted)
+        run: |
+          docker pull ghcr.io/gitleaks/gitleaks:v8.24.3
+          docker image inspect --format '{{json .RepoDigests}}' ghcr.io/gitleaks/gitleaks:v8.24.3
+          bash ci/advisory-scan.sh gitleaks 10 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3 git --redact=100 --no-banner --exit-code 10 --log-opts=--all /repo
+  container-vulnerabilities:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build scheduler image for target architecture
+        run: |
+          docker build --pull --platform linux/arm64 -t router-controller:scan docker/
+          docker save router-controller:scan -o "$RUNNER_TEMP/router-controller.tar"
+      - name: Scan scheduler packages
+        run: |
+          docker pull aquasec/trivy:0.69.3
+          docker image inspect --format '{{json .RepoDigests}}' aquasec/trivy:0.69.3
+          bash ci/advisory-scan.sh trivy-image 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/router-controller.tar:/scan/image.tar:ro" aquasec/trivy:0.69.3 image --input /scan/image.tar --scanners vuln --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 10
+      - name: Scan container configuration
+        if: success() || failure()
+        run: bash ci/advisory-scan.sh trivy-config 10 docker run --rm --cap-drop ALL --security-opt no-new-privileges -v "$PWD/docker:/scan:ro" aquasec/trivy:0.69.3 config --exit-code 10 /scan
+      - name: Upload container reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-vulnerabilities
+          path: scan-reports/
+          if-no-files-found: warn
+          retention-days: 14
