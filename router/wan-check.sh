@@ -1,12 +1,12 @@
 #!/bin/sh
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-WAN_PROTO="$(nvram get wan0_proto)"
-WAN_PHYS="$(nvram get wan0_ifname)"
-WAN_IF="$(nvram get wan0_gw_ifname)"
-WAN_IP="$(nvram get wan0_ipaddr)"
-WAN_STATE="$(nvram get wan0_state_t)"
-WAN_GW="$(nvram get wan0_gateway)"
+WAN_PROTO="$(nvram get wan0_proto)" || exit 1
+WAN_PHYS="$(nvram get wan0_ifname)" || exit 1
+WAN_IF="$(nvram get wan0_gw_ifname)" || exit 1
+WAN_IP="$(nvram get wan0_ipaddr)" || exit 1
+WAN_STATE="$(nvram get wan0_state_t)" || exit 1
+WAN_GW="$(nvram get wan0_gateway)" || exit 1
 ROUTE="$(ip -4 route get 1.1.1.1 2>/dev/null)" || exit 1
 ROUTE_IF="$(echo "$ROUTE" | awk 'NR==1 {for(i=1;i<NF;i++) if($i=="dev") {print $(i+1); exit}}')"
 ROUTE_IP="$(echo "$ROUTE" | awk 'NR==1 {for(i=1;i<NF;i++) if($i=="src") {print $(i+1); exit}}')"
@@ -38,7 +38,8 @@ if [ "$WAN_IP" != "$ROUTE_IP" ]; then
     echo "ERROR: WAN source address mismatch"
     exit 1
 fi
-if ! ip -4 addr show dev "$WAN_IF" | awk -v ip="$WAN_IP" '
+ADDR="$(ip -4 addr show dev "$WAN_IF")" || exit 1
+if ! printf '%s\n' "$ADDR" | awk -v ip="$WAN_IP" '
     $1=="inet" {
         split($2,a,"/")
         if(a[1]==ip) found=1

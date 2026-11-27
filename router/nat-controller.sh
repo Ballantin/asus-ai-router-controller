@@ -282,10 +282,13 @@ printf '%s\n' "$TRANSACTION" | iptables-restore --test --noflush ||
     fail "Transaction validation failed"
 if [ "$MODE" != DISABLED ]; then
     "$BASE/wan-check.sh" || fail "WAN changed before commit"
-    [ "$(nvram get wan0_gw_ifname)" = "$WAN_IF" ] &&
-    [ "$(nvram get wan0_ipaddr)" = "$WAN_IP" ] || fail "WAN changed before commit"
+    NOW_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot recheck WAN interface"
+    NOW_IP="$(nvram get wan0_ipaddr)" || fail "Cannot recheck WAN IP"
+    [ "$NOW_IF" = "$WAN_IF" ] && [ "$NOW_IP" = "$WAN_IP" ] ||
+        fail "WAN changed before commit"
     if [ -n "$DNAT_DESIRED" ]; then
-        [ "$(nvram get wan0_ifname)" = "$WAN_PHYS" ] || fail "Physical WAN changed before commit"
+        NOW_PHYS="$(nvram get wan0_ifname)" || fail "Cannot recheck physical WAN"
+        [ "$NOW_PHYS" = "$WAN_PHYS" ] || fail "Physical WAN changed before commit"
         validate_destinations
         FILTER_NOW="$(read_filter)" || fail "Cannot recheck native FORWARD"
         [ "$FILTER_NOW" = "$FILTER" ] || fail "Native FORWARD changed during reconciliation"

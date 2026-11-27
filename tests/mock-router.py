@@ -18,7 +18,7 @@ if cmd == "nvram":
     if args[1] == "wan0_gw_ifname" and (root / "interface-changed").exists():
         values[args[1]] = "eth1"
     print(values[args[1]])
-    sys.exit(0)
+    sys.exit(int((root / ("fail-nvram-" + args[1])).exists()))
 data = json.loads(state.read_text())
 if cmd == "iptables":
     if args == ["-t", "filter", "-S", "FORWARD"]:
@@ -79,6 +79,9 @@ if "--test" in args:
                           ("race-destination", "fail-destination")):
         if (root / event).exists():
             (root / marker).touch()
+    if (root / "race-nvram").exists():
+        key = (root / "race-nvram").read_text()
+        (root / ("fail-nvram-" + key)).touch()
     for name in ("nat-controller.conf", "snat-rules.conf", "dnat-rules.conf"):
         if (root / ("race-" + name)).exists():
             with (root / name).open("a") as f:

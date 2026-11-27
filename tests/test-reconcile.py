@@ -170,6 +170,14 @@ fi
     run("DRIFT_DETECTED")
     assert get() == base and count() == n
     mode("ENFORCE")
+    for key, message in (("wan0_gw_ifname", "Cannot recheck WAN interface"),
+                         ("wan0_ipaddr", "Cannot recheck WAN IP"),
+                         ("wan0_ifname", "Cannot recheck physical WAN")):
+        (root / "race-nvram").write_text(key)
+        run(message, False)
+        assert get() == base and count() == n
+        (root / ("fail-nvram-" + key)).unlink()
+    (root / "race-nvram").unlink()
     run("RECONCILED")
     assert count() == n+1
     assert get()["POSTROUTING"] == [jump, native]
