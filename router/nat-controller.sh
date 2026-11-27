@@ -35,6 +35,10 @@ MODE="$(printf '%s\n' "$GENERAL" | sed -n '1p')"
 EXPECTED_WAN_IP="$(printf '%s\n' "$GENERAL" | sed -n '2p')"
 ALLOW="$(printf '%s\n' "$GENERAL" | sed -n '3p')"
 POLICY="$(printf '%s\n' "$GENERAL" | sed -n '4p')"
+case "$POLICY" in
+    PRESERVE|WITHDRAW_UNSAFE|WITHDRAW_UNVERIFIED) ;;
+    *) fail "Invalid runtime policy" ;;
+esac
 case "$MODE" in
     DISABLED|AUDIT|ENFORCE) ;;
     *) fail "Invalid operating mode"
@@ -150,8 +154,9 @@ runtime_safety() {
     )"
     printf '%s\n' "$SAFETY_TX" | iptables-restore --test --noflush ||
         fail "Runtime withdrawal transaction validation failed"
-    [ "$(nvram get wan0_gw_ifname)" = "$WAN_IF" ] &&
-    [ "$(nvram get wan0_ifname)" = "$WAN_PHYS" ] ||
+    NOW_IF="$(nvram get wan0_gw_ifname)" || fail "Cannot recheck runtime WAN interface"
+    NOW_PHYS="$(nvram get wan0_ifname)" || fail "Cannot recheck runtime physical WAN"
+    [ "$NOW_IF" = "$WAN_IF" ] && [ "$NOW_PHYS" = "$WAN_PHYS" ] ||
         fail "WAN interfaces changed during runtime withdrawal"
     RECHECK="$(runtime_plan "$INSTALLED")" || fail "Runtime withdrawal reclassification failed"
     [ "$PLAN" = "$RECHECK" ] || fail "Runtime destination classification changed"

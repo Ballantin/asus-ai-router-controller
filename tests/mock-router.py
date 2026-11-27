@@ -15,6 +15,8 @@ if cmd == "nvram":
     values = {"wan0_gw_ifname": "ppp0", "wan0_ipaddr": "203.0.113.10", "wan0_ifname": "eth0"}
     if args[1] == "wan0_ipaddr" and (root / "wan-changed").exists():
         values[args[1]] = "203.0.113.99"
+    if args[1] == "wan0_gw_ifname" and (root / "interface-changed").exists():
+        values[args[1]] = "eth1"
     print(values[args[1]])
     sys.exit(0)
 data = json.loads(state.read_text())
@@ -68,6 +70,10 @@ if "--test" in args:
     if (root / "fail-test").exists():
         sys.exit(1)
     # Simulate independent changes only after the dry-run has succeeded.
+    if (root / "race-classification").exists():
+        (root / "class-192.168.1.102").write_text("SAFE\n")
+    if (root / "race-interface").exists():
+        (root / "interface-changed").touch()
     for event, marker in (("race-wan", "wan-changed"),
                           ("race-filter", "filter-changed"),
                           ("race-destination", "fail-destination")):

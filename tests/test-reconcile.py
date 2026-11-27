@@ -16,6 +16,17 @@ with tempfile.TemporaryDirectory() as td:
     binpath.mkdir()
     for name in ("iptables", "iptables-restore", "nvram", "logger"):
         (binpath / name).symlink_to(repo / "tests/mock-router.py")
+    # Fault-inject the inspection awk invocation without changing production.
+    awk_path = shutil.which("awk")
+    assert awk_path
+    wrapper = binpath / "awk"
+    wrapper.write_text(f'''#!/bin/sh
+if [ -f "$MOCK_ROOT/fail-inspect" ] && [ "$1" = -v ] && [ "$2" = c=AI_NAT_SNAT ]; then
+    exit 1
+fi
+exec "{awk_path}" "$@"
+''')
+    wrapper.chmod(0o700)
     # Substitute only in temporary test copy; no runtime override in production.
     source = (repo / "router/nat-controller.sh").read_text()
     for old, new in (
@@ -33,6 +44,8 @@ with tempfile.TemporaryDirectory() as td:
     validator = root / "dnat-validate.sh"
     validator.write_text("""#!/bin/sh
 if [ "$4" = --classify ]; then
+    if [ -f "$MOCK_ROOT/classifier-fail" ]; then exit 1; fi
+    if [ -f "$MOCK_ROOT/classifier-output" ]; then cat "$MOCK_ROOT/classifier-output"; exit 0; fi
     awk -v root="$MOCK_ROOT" '
         {split($NF,t,":"); if(!seen[t[1]]++) {
             status="SAFE"
@@ -320,4 +333,67 @@ fi
     flag.unlink()
     run("RECONCILED")
     assert get() == before
+    # Failure paths: an unsafe installed destination never authorises a
+    # mutation if ownership, classification or transaction checks fail.
+    mode("ENFORCE")
+    flag.write_text("UNSAFE\n")
+    n = count()
+    for marker, message in (
+        ("classifier-fail", "Installed DNAT classification failed"),
+        ("fail-test", "Runtime withdrawal transaction validation failed"),
+        ("fail-commit", "Runtime withdrawal commit failed"),
+        ("race-classification", "Runtime destination classification changed"),
+        ("race-interface", "WAN interfaces changed during runtime withdrawal"),
+        ("race-nat-controller.conf", "General configuration changed during runtime withdrawal"),
+    ):
+        put(before)
+        mode("ENFORCE")
+        flag.write_text("UNSAFE\n")
+        (root / marker).touch()
+        run(message, False)
+        assert get() == before and count() == n
+        (root / marker).unlink()
+        if (root / "interface-changed").exists():
+            (root / "interface-changed").unlink()
+    mode("ENFORCE")
+    flag.write_text("UNSAFE\n")
+    for output in ("", "192.168.1.102|UNSAFE\n",
+                   "192.168.1.100|SAFE\n192.168.1.102|UNKNOWN\n",
+                   "192.168.1.100|SAFE\n192.168.1.102|UNSAFE\n192.168.1.102|UNSAFE\n",
+                   "192.168.1.100|SAFE\n192.168.1.102|UNSAFE\n192.168.1.103|SAFE\n"):
+        (root / "classifier-output").write_text(output)
+        run("Installed DNAT classification failed", False)
+        assert get() == before and count() == n
+    (root / "classifier-output").unlink()
+    put(dict(before, OTHER=[dj]))
+    run("Unexpected references", False)
+    assert count() == n and get()["AI_NAT_DNAT"] == before["AI_NAT_DNAT"]
+    put(before)
+    (root / "race-nat").touch()
+    run("NAT table changed during runtime withdrawal", False)
+    assert count() == n and get()["AI_NAT_DNAT"] == before["AI_NAT_DNAT"]
+    assert get()["POSTROUTING"] == before["POSTROUTING"] + ["-p udp -j RETURN"]
+    (root / "race-nat").unlink()
+    put(before)
+    (root / "bad-postcommit").touch()
+    run("Runtime withdrawal verification failed", False)
+    assert count() == n+1 and get()["AI_NAT_DNAT"] == before["AI_NAT_DNAT"][:1]
+    (root / "bad-postcommit").unlink()
+    put(before)
+    # All mappings withdrawn; empty chain remains, then ordinary recovery.
+    other = root / "class-192.168.1.100"
+    other.write_text("UNSAFE\n")
+    run("DNAT_WITHDRAWN", False)
+    assert get()["AI_NAT_DNAT"] == [] and get()["PREROUTING"] == before["PREROUTING"]
+    assert get()["AI_NAT_SNAT"] == before["AI_NAT_SNAT"]
+    flag.unlink()
+    other.unlink()
+    run("RECONCILED")
+    assert get() == before
+    n = count()
+    (root / "fail-inspect").touch()
+    run("Cannot inspect managed chain", False)
+    assert get() == before and count() == n
+    (root / "fail-inspect").unlink()
+    run("IN_SYNC")
 print("Mock reconciliation regression tests passed")

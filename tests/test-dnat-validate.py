@@ -57,4 +57,6 @@ esac
         "192.168.1.100|SAFE", "192.168.2.100|UNSAFE",
         "192.168.1.99|UNVERIFIED", "192.168.1.200|UNVERIFIED",
         "192.168.1.1|UNSAFE", "192.168.3.100|UNSAFE"], result.stdout + result.stderr
+    for bad_target in ("192.168.1.100:0", "192.168.1.100:65536", "192.168.1.100:443:444", "192.168.1.100:80-90"):
+        check([bad_target], False)
 print("Destination validation tests passed")

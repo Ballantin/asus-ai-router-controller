@@ -49,8 +49,9 @@ TARGETS="$(printf '%s\n' "$RULES" | awk '
     {
         if($1!="-A" || $2!="AI_NAT_DNAT" || $(NF-2)!="DNAT" ||
            $(NF-3)!="-j" || $(NF-1)!="--to-destination") exit 1
-        split($NF,t,":")
-        if(!valid(t[1])) exit 1
+        n=split($NF,t,":")
+        if(n>2 || !valid(t[1]) ||
+           (n==2 && (t[2] !~ /^[1-9][0-9]*$/ || length(t[2])>5 || t[2]+0>65535))) exit 1
         if(!seen[t[1]]++) print t[1]
     }')" || fail "malformed canonical rules"
 [ -n "$TARGETS" ] || fail "no destinations extracted"
@@ -97,11 +98,12 @@ for TARGET in $TARGETS; do
         NR==1 {
             if($1!=dst) exit 1
             for(i=2;i<=NF;i++) {
-                if($i=="via") exit 10
-                if($i=="linkdown" || $i=="dead") exit 1
+                if($i=="via") indirect=1
+                if($i=="linkdown" || $i=="dead") unavailable=1
                 if($i=="dev") {if(++n!=1 || i==NF) exit 1; dev=$(i+1)}
             }
-            if(n!=1) exit 1
+            if(n!=1 || unavailable || dev !~ /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/ || length(dev)>15) exit 1
+            if(indirect) exit 10
             print dev
         }
         END {if(NR==0) exit 1}
@@ -129,15 +131,16 @@ for TARGET in $TARGETS; do
             return ((a[1]*256+a[2])*256+a[3])*256+a[4]
         }
         $1=="inet" {
-            split($2,a,"/")
-            if(a[2] !~ /^[0-9]+$/ || a[2]<1 || a[2]>30) next
+            if(split($2,a,"/")!=2 || a[2] !~ /^[0-9]+$/ || a[2]<1 || a[2]>30) {unsupported=1; next}
+            if(split(a[1],oct,"[.]")!=4) {unsupported=1; next}
+            for(i=1;i<=4;i++) if(oct[i] !~ /^(0|[1-9][0-9]*)$/ || length(oct[i])>3 || oct[i]+0>255) {unsupported=1; next}
             observed=1
             size=2^(32-a[2])
             base=int(num(a[1])/size)*size
             if(num(dst)>base && num(dst)<base+size-1) good=1
             if(num(dst)==base || num(dst)==base+size-1) bad=1
         }
-        END {exit (bad?10:good?0:observed?10:1)}
+        END {exit (bad?10:good?0:unsupported?1:observed?10:1)}
     '
     RC=$?
     if [ "$RC" = 10 ]; then report UNSAFE "not a usable host on $DEV"
