@@ -8,8 +8,12 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-latest
+    env:
+      PYTHONOPTIMIZE: '0'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Parser and shell syntax
         run: sh tests/test-config.sh
       - name: Mocked reconciliation
@@ -18,3 +22,11 @@ jobs:
         run: sh -n router/dnat-validate.sh && python3 tests/test-dnat-validate.py
       - name: Native DNAT conflict detection
         run: python3 tests/test-dnat-conflicts.py
+      - name: Deterministic AWK parser fuzzing
+        run: python3 tests/test-parser-fuzz.py
+      - name: Compose security contract
+        run: |
+          set -o pipefail
+          ROUTER_USER=ci-validation docker compose -f docker/docker-compose.yml config --format json | python3 tests/test-compose-security.py
+      - name: Scanner gate negative controls
+        run: python3 tests/test-security-gates.py

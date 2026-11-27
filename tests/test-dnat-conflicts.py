@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as tmp:
     def check(wanted, ok, extra="", base=BASE, warning=None):
         d.write_text(wanted)
         n.write_text(base + extra)
-        r = subprocess.run(["awk", "-v", "desired_file=" + str(d), "-f",
+        r = subprocess.run(["/usr/bin/awk", "-v", "desired_file=" + str(d), "-f",
                             str(ROOT / "router/dnat-conflicts.awk"), str(d), str(n)],
                            text=True, capture_output=True)
         assert (r.returncode == 0) == ok, (wanted, extra, r.stdout, r.stderr)

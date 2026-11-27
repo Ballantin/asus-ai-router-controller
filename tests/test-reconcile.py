@@ -16,6 +16,11 @@ with tempfile.TemporaryDirectory() as td:
     binpath.mkdir()
     for name in ("iptables", "iptables-restore", "nvram", "logger"):
         (binpath / name).symlink_to(repo / "tests/mock-router.py")
+    # Never fall through to host commands if the mock is missing or non-executable.
+    for name in ("iptables", "iptables-restore", "nvram", "logger"):
+        resolved = shutil.which(name, path=str(binpath))
+        if resolved != str(binpath / name) or not os.access(resolved, os.X_OK):
+            raise RuntimeError(f"Mock command unavailable: {name}")
     # Fault-inject the inspection awk invocation without changing production.
     awk_path = shutil.which("awk")
     assert awk_path

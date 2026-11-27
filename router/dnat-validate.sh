@@ -25,7 +25,9 @@ WAN="$2"
 PHYSICAL="$3"
 RULES="$(cat)" || fail "cannot read rules"
 [ -n "$RULES" ] || exit 0
-[ -n "$ALLOW" ] && [ -n "$WAN" ] && [ -n "$PHYSICAL" ] || fail "missing interface policy"
+if [ -z "$ALLOW" ] || [ -z "$WAN" ] || [ -z "$PHYSICAL" ]; then
+    fail "missing interface policy"
+fi
 # Reject unsafe allowlist entries even if not used by a particular rule.
 awk -v list="$ALLOW" -v wan="$WAN" -v physical="$PHYSICAL" 'BEGIN {
     n=split(list,a,",")

@@ -3,7 +3,6 @@
 import pathlib
 import subprocess
 import tempfile
-import os
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as tmp:
@@ -33,7 +32,7 @@ esac
         rules = "\n".join(
             "-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 8443 -j DNAT --to-destination " + t
             for t in targets)
-        result = subprocess.run(["sh", str(validator), allowed, "ppp0", "eth0"],
+        result = subprocess.run(["/bin/sh", str(validator), allowed, "ppp0", "eth0"],
                                 input=rules, text=True, capture_output=True)
         assert (result.returncode == 0) == ok, (targets, allowed, result.stderr)
     check([], True, "")
@@ -50,7 +49,7 @@ esac
     check(["192.168.1.100", "192.168.2.100"], False)
     targets = ["192.168.1.100", "192.168.2.100", "192.168.1.99", "192.168.1.200", "192.168.1.1", "192.168.3.100"]
     rules = "\n".join("-A AI_NAT_DNAT -d 203.0.113.10/32 -i ppp0 -p tcp -m tcp --dport 8443 -j DNAT --to-destination " + t for t in targets)
-    result = subprocess.run(["sh", str(validator), "br0", "ppp0", "eth0", "--classify"],
+    result = subprocess.run(["/bin/sh", str(validator), "br0", "ppp0", "eth0", "--classify"],
                             input=rules, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [

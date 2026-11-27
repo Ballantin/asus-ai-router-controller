@@ -13,6 +13,8 @@ The AI board invokes a restricted SSH command over its internal management link.
 - [Hardware acceptance results](docs/acceptance-tests.md#v040-hardware-acceptance-results)
 - [Changelog](CHANGELOG.md)
 - [Project roadmap](ROADMAP.md)
+- [Security policy and private vulnerability reporting](SECURITY.md)
+- [Security assurance and scanning](docs/security-assurance.md)
 
 Review local settings and start in AUDIT before enabling enforcement. DHCP WAN and routed additional IPv4 addresses are planned for v0.4.5 validation. Full router reboot, offline startup and maximum throughput remain unverified.
 

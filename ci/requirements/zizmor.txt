@@ -1,0 +1,3 @@
+# Scanner environment observed in Security baseline #3 (Ubuntu 24.04, x86_64).
+# Version lock, not a cryptographic hash lock. Review changes before updating.
+zizmor==1.11.0

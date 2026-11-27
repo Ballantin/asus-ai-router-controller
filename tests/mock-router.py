@@ -46,6 +46,13 @@ assert lines[0] == "*nat" and lines[-1] == "COMMIT"
 for line in lines[1:-1]:
     op, chain, *tail = line.split()
     rule = " ".join(tail)
+    # A transaction may modify only owned chains or their exact hook jumps.
+    owned = {"AI_NAT_SNAT", "AI_NAT_DNAT"}
+    if chain not in owned:
+        expected = {"POSTROUTING": "AI_NAT_SNAT", "PREROUTING": "AI_NAT_DNAT"}
+        target = expected.get(chain)
+        assert target is not None and op in ("-A", "-D", "-I"), line
+        assert tail == ["-j", target] or (op == "-I" and tail == ["1", "-j", target]), line
     if op == "-N":
         assert chain not in data
         data[chain] = []

@@ -30,6 +30,8 @@ bad '1|192.168.1.100|any|tcp|65536|WAN_IP'
 bad '1|192.168.1.100|any|gre|any|WAN_IP'
 bad '1|192.168.1.100|any|tcp|443'
 bad '0|invalid|any|tcp|443|WAN_IP'
+# Literal shell injection fixture; must not expand.
+# shellcheck disable=SC2016
 bad '1|192.168.1.100|any|tcp|443|$(id)'
 [ "$(awk -v kind=general -f "$P" router/nat-controller.conf.example)" = 'AUDIT
 203.0.113.10
@@ -76,6 +78,8 @@ dnat_bad '1|WAN_IP|any|tcp|8000:9000|192.168.1.100|443|0'
 dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.0/24|443|0'
 dnat_bad '1|any|any|tcp|8443|192.168.1.100|443|0'
 dnat_bad '1|WAN_IP|any|tcp|8443|192.168.1.999|443|0'
+# Literal shell injection fixture; must not expand.
+# shellcheck disable=SC2016
 dnat_bad '0|WAN_IP|any|tcp|8443|192.168.1.100|$(id)|0'
 dnat_bad '1|WAN_IP|any|tcp|8443|127.0.0.1|443|0'
 dnat_bad '1|WAN_IP|any|tcp|8443|169.254.0.2|443|0'

@@ -17,3 +17,8 @@
 ## Open
 - Pre-commit configuration and state checks are implemented. There is no global native-writer lock or cross-table atomicity.
 - ISP extra-address delivery and real DHCP/offload acceptance pending.
+
+## Security assurance
+- Introduce independent advisory CI scanning and review the initial findings before selecting blocking release gates. Never treat a successful advisory scan job as proof of a clean report. No production deployment changes in the baseline branch.
+
+- Owner approved mandatory thresholds in security-assurance.md; five required GitHub Actions checks independently verified on main ruleset. SARIF publication separate and not required for PRs. Root scheduler and current apk package-pinning findings are scoped tracked exceptions, not global suppressions. Security source merge does not authorize hardware deployment or release. Retain mandatory CI when starting v0.4.5.
