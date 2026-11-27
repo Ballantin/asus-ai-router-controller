@@ -22,3 +22,9 @@ jobs:
         run: sh -n router/dnat-validate.sh && python3 tests/test-dnat-validate.py
       - name: Native DNAT conflict detection
         run: python3 tests/test-dnat-conflicts.py
+      - name: Deterministic AWK parser fuzzing
+        run: python3 tests/test-parser-fuzz.py
+      - name: Compose security contract
+        run: |
+          set -o pipefail
+          ROUTER_USER=ci-validation docker compose -f docker/docker-compose.yml config --format json | python3 tests/test-compose-security.py
