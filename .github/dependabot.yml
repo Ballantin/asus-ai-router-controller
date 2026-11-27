@@ -4,14 +4,20 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
+    groups:
+      workflow-actions:
+        patterns:
+          - "*"
   - package-ecosystem: docker
     directory: /docker
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 1
   - package-ecosystem: pip
     directory: /ci/requirements
     schedule:
       interval: weekly
-    open-pull-requests-limit: 3
+    # These are resolved scanner environments, not independent direct dependencies.
+    # Routine upgrades are coordinated manually; security updates remain enabled.
+    open-pull-requests-limit: 0
